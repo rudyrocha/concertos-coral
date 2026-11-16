@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 2.3.3
+
+- detecta quando a interface atualizada ainda está conectada a um processo antigo;
+- encerra automaticamente a instância anterior ao abrir a nova versão;
+- substitui o erro técnico de JSON por uma orientação para encerrar e reabrir o editor.
+
 ## 2.3.2
 
 - detecta marcadores gravados além da duração real de vídeo e áudio;

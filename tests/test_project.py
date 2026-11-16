@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from coral_editor import (  # noqa: E402
     CoralApplication,
     SCHEMA,
+    VERSION,
     _best_lag,
     add_nostdin,
     final_time,
@@ -194,6 +195,15 @@ class ProjectRulesTest(unittest.TestCase):
         )
         self.assertIn(r'D:\OFFline\Videos', launcher)
         self.assertIn("FolderExists(startFolder)", launcher)
+
+    def test_interface_detects_outdated_server_without_json_parse_error(self):
+        root = Path(__file__).resolve().parents[1]
+        interface = (root / "editor.html").read_text(encoding="utf-8")
+        model = json.loads((root / "projeto_modelo.json").read_text(encoding="utf-8"))
+        self.assertIn(f"const UI_VERSION='{VERSION}'", interface)
+        self.assertIn("response.text()", interface)
+        self.assertNotIn("response.json()", interface)
+        self.assertEqual(model["app_version"], VERSION)
 
     def test_media_bounds_reject_corrupted_markers(self):
         project = sample_project()

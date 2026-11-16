@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -32,7 +33,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.3.2"
+VERSION = "2.3.3"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -1565,6 +1566,40 @@ def running_instance(port: int) -> dict[str, Any] | None:
         return None
 
 
+def shutdown_outdated_instance(port: int) -> None:
+    """Encerra uma instância antiga antes de carregar arquivos da versão nova."""
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/api/shutdown",
+        data=b"{}",
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=2.0) as response:
+            payload = json.loads(response.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as exc:
+        try:
+            payload = json.loads(exc.read().decode("utf-8") or "{}")
+            detail = payload.get("error")
+        except Exception:
+            detail = None
+        raise RuntimeError(
+            detail or "A versão anterior não pôde ser encerrada automaticamente."
+        ) from exc
+    except Exception as exc:
+        raise RuntimeError(
+            "A versão anterior não pôde ser encerrada automaticamente."
+        ) from exc
+    if payload.get("ok") is False:
+        raise RuntimeError(payload.get("error") or "Falha ao encerrar a versão anterior.")
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if running_instance(port) is None:
+            return
+        time.sleep(0.1)
+    raise RuntimeError("A versão anterior ainda está em execução.")
+
+
 def same_path(left: str | Path, right: str | Path) -> bool:
     return os.path.normcase(os.path.abspath(str(left))) == os.path.normcase(
         os.path.abspath(str(right))
@@ -1591,14 +1626,27 @@ def main() -> None:
         existing = running_instance(args.port)
         if existing and existing.get("app") == APP_ID:
             if same_path(existing.get("source_folder", ""), source):
-                url = f"http://127.0.0.1:{args.port}/"
-                webbrowser.open(url)
-                print(f"O editor já estava aberto. Reutilizando: {url}")
-                return
-            fail(
-                "Já existe um Editor de Concertos aberto para outra pasta. "
-                "Use o botão Encerrar no editor atual antes de abrir outro concerto."
-            )
+                if existing.get("version") == VERSION:
+                    url = f"http://127.0.0.1:{args.port}/"
+                    webbrowser.open(url)
+                    print(f"O editor já estava aberto. Reutilizando: {url}")
+                    return
+                old_version = existing.get("version", "desconhecida")
+                print(
+                    f"Encerrando a versão anterior ({old_version}) para iniciar a {VERSION}..."
+                )
+                try:
+                    shutdown_outdated_instance(args.port)
+                except RuntimeError as exc:
+                    fail(
+                        "Existe uma versão anterior do editor em execução. "
+                        f"{exc} Use o botão Encerrar editor e abra novamente."
+                    )
+            else:
+                fail(
+                    "Já existe um Editor de Concertos aberto para outra pasta. "
+                    "Use o botão Encerrar no editor atual antes de abrir outro concerto."
+                )
     app = CoralApplication(source, script_dir, archive_root)
 
     if args.render_final:

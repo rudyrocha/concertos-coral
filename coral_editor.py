@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -326,6 +326,24 @@ def validate_project(project: dict[str, Any]) -> None:
     target_ratio = float(export.get("width", 1920)) / float(export.get("height", 1080))
     if abs(width / height - target_ratio) > 0.002:
         raise ValueError("O enquadramento precisa manter a proporção da exportação.")
+
+
+def validate_media_bounds(project: dict[str, Any]) -> None:
+    """Impede que a interface grave marcadores fora das fontes reconhecidas."""
+    audio_duration = project.get("audio_duration_seconds")
+    if audio_duration is None:
+        return
+    maximum = float(audio_duration) + 0.5
+    invalid = [
+        track.get("title", "Música")
+        for track in enabled_tracks(project)
+        if float(track["start_tascam"]) < 0 or float(track["start_tascam"]) > maximum
+    ]
+    if invalid or float(project.get("last_end_tascam", 0.0)) > maximum:
+        raise ValueError(
+            "Há marcações fora da duração do Tascam. Use “Reparar marcações e prévia” "
+            "antes de salvar novos pontos."
+        )
 
 
 def resolve_sources(project: dict[str, Any], source: Path) -> tuple[list[Path], Path]:
@@ -909,6 +927,53 @@ class CoralApplication:
         self.project.pop("timing_error", None)
         return True
 
+    def repair_timeline(self) -> Path:
+        """Arquiva timecodes inválidos e recria uma base provisória dentro das fontes."""
+        current = self.reload_project()
+        tracks = [dict(track) for track in enabled_tracks(current)]
+        if not tracks:
+            raise ValueError("Não há músicas habilitadas para reparar.")
+        camera_duration = float(current.get("camera_duration_seconds", 0.0))
+        audio_duration = float(current.get("audio_duration_seconds", 0.0))
+        available = min(camera_duration, audio_duration)
+        if available <= 2.0:
+            raise ValueError("As durações das fontes não permitem reconstruir a linha do tempo.")
+
+        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup = self.work_dir / f"projeto_antes_reparo_{timestamp}.json"
+        shutil.copy2(self.project_path, backup)
+
+        margin = min(10.0, max(1.0, available / 20.0))
+        span = max(1.0, available - 2 * margin)
+        for index, track in enumerate(tracks):
+            track["start_tascam"] = round(margin + span * index / max(1, len(tracks)), 3)
+            track["enabled"] = True
+            track["confirmed"] = False
+
+        current["tracks"] = tracks
+        current["sync"]["offset_seconds"] = 0.0
+        current["sync"]["clock_ratio"] = 1.0
+        current["trim"] = {"before_seconds": margin, "after_seconds": margin}
+        current["last_end_tascam"] = round(available - margin, 3)
+        current["last_end_confirmed"] = False
+        current["setup_complete"] = False
+        current["preview"] = {
+            "audio_start_tascam": 0.0,
+            "audio_end_tascam": available,
+            "uncropped": True,
+        }
+        current["preview_needs_regeneration"] = True
+        current["recovery_backup"] = str(backup)
+        current["notice"] = (
+            "Linha do tempo reparada. Os marcadores foram redistribuídos provisoriamente; "
+            "confirme novamente o início de cada música e o fim musical."
+        )
+        current.pop("timing_error", None)
+        self.project = current
+        self.refresh_outputs()
+        atomic_write_json(self.project_path, current)
+        return backup
+
     @staticmethod
     def preview_fallback_timing(project: dict[str, Any]) -> dict[str, Any]:
         """Descreve a prévia anterior quando o novo sincronismo não é calculável."""
@@ -1056,6 +1121,7 @@ class CoralApplication:
         if new_timing != previous_timing:
             current["preview_needs_regeneration"] = True
         validate_project(current)
+        validate_media_bounds(current)
         self.project = current
         self.refresh_outputs()
         atomic_write_json(self.project_path, current)
@@ -1281,6 +1347,20 @@ class CoralApplication:
                 return_code = process.wait()
             if return_code != 0:
                 raise RuntimeError(f"FFmpeg terminou com código {return_code}.")
+            try:
+                rendered_duration = probe_duration(self.ffprobe, temporary)
+            except RuntimeError as exc:
+                temporary.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"O FFmpeg não produziu uma {kind} utilizável; a saída anterior foi preservada."
+                ) from exc
+            minimum_duration = max(0.5, float(timing["duration"]) * 0.90)
+            if rendered_duration < minimum_duration:
+                temporary.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"A {kind} ficou incompleta ({rendered_duration:.1f} s de "
+                    f"{timing['duration']:.1f} s); a saída anterior foi preservada."
+                )
             os.replace(temporary, output)
 
             verification = None
@@ -1433,6 +1513,17 @@ class RequestHandler(BaseHTTPRequestHandler):
             elif self.path == "/api/render-preview":
                 self.app.start_render(final=False)
                 self.send_json({"ok": True}, HTTPStatus.ACCEPTED)
+            elif self.path == "/api/repair-timeline":
+                if self.app.state.snapshot()["running"]:
+                    raise RuntimeError("Aguarde o término da renderização antes do reparo.")
+                backup = self.app.repair_timeline()
+                self.send_json(
+                    {
+                        "ok": True,
+                        "backup": str(backup),
+                        "project": self.app.public_project(),
+                    }
+                )
             elif self.path == "/api/shutdown":
                 if self.app.state.snapshot()["running"]:
                     raise RuntimeError("Aguarde o término da renderização antes de encerrar.")
@@ -1516,9 +1607,12 @@ def main() -> None:
         return
     had_preview = app.preview_path.exists()
     if not had_preview or app.project.get("preview_needs_regeneration", False):
-        print("A prévia ainda não existe. A geração pode levar vários minutos.")
-        app.start_render(final=False)
-        wait_for_render(app, fatal=args.prepare_only or not had_preview)
+        if had_preview and app.project.get("timing_error") and not args.prepare_only:
+            print("A prévia anterior será aberta para permitir o reparo da linha do tempo.")
+        else:
+            print("A prévia ainda não existe. A geração pode levar vários minutos.")
+            app.start_render(final=False)
+            wait_for_render(app, fatal=args.prepare_only or not had_preview)
     if args.prepare_only:
         print(f"Prévia: {app.preview_path}")
         return

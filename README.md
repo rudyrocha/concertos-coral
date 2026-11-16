@@ -4,8 +4,12 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2.3.1
+## Principais recursos da versão 2.3.2
 
+- reparo assistido de projetos com timecodes fora da duração das fontes;
+- cópia automática do projeto anterior antes de redistribuir marcadores;
+- validação da duração e do tamanho da nova prévia antes de substituir a anterior;
+- bloqueio de novos marcadores que ultrapassem a duração do Tascam;
 - abertura garantida mesmo quando o projeto salvo contém sincronismo incompatível;
 - seletor de pasta iniciado em `D:\OFFline\Videos`, quando disponível;
 - mensagem visível e `editor_erro.log` para falhas inesperadas de inicialização;
@@ -69,6 +73,8 @@ O editor mantém uma única instância na porta local `8765`. Para trocar de con
 8. Confira no painel a validação de duração e os caminhos do vídeo e do ZIP do projeto.
 
 No sincronismo, use **Deslocamento Tascam − câmera** quando a diferença for aproximadamente constante durante todo o concerto. Se a diferença aumentar gradualmente do início para o fim, ajuste **Correção de relógio**. Ao informar um valor incompatível com as fontes, o editor recusa a nova prévia e mantém a anterior disponível.
+
+Se um projeto antigo contiver marcações fora das fontes, use **Reparar marcações e prévia**. O editor arquiva o JSON anterior, preserva as músicas habilitadas, redistribui os pontos provisoriamente na duração real e gera novamente a prévia completa.
 
 Um `projeto_inicial.json` analisado externamente continua sendo aceito. Sem ele, a configuração inicial é feita automaticamente. Os marcadores distribuídos pelo editor são sugestões de navegação, não reconhecimento musical; a exportação final só é liberada após confirmação humana.
 

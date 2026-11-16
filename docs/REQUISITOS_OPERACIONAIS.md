@@ -37,6 +37,8 @@ Isso evita janelas intermitentes e impede que teclas digitadas pelo usuário sej
 - Saídas são produzidas primeiro com sufixo `.parcial` e publicadas apenas após sucesso.
 - Falha de renderização mantém projeto, log, prévia anterior e originais.
 - Uma regeneração com sincronismo incompatível não encerra o editor quando existe uma prévia anterior válida.
+- Uma prévia só substitui a anterior depois que sua duração é medida e validada.
+- O reparo de linha do tempo cria uma cópia datada do JSON anterior antes de alterar marcadores.
 - O ZIP externo de projeto não contém mídia e não substitui um pacote anterior com o mesmo nome.
 - A validação de duração gera alerta, mas não exclui automaticamente o MP4.
 

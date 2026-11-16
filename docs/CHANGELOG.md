@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 2.3.2
+
+- detecta marcadores gravados além da duração real de vídeo e áudio;
+- oferece reparo assistido com cópia automática do projeto anterior;
+- preserva as músicas habilitadas e redistribui apenas seus timecodes;
+- valida a duração da saída antes de publicar uma nova prévia;
+- impede que uma saída vazia substitua uma prévia válida.
+
 ## 2.3.1
 
 - permite abrir e corrigir projetos que tenham sincronismo incompatível salvo;

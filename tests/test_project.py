@@ -18,6 +18,7 @@ from coral_editor import (  # noqa: E402
     migrate_project,
     parse_repertoire_text,
     source_times,
+    validate_media_bounds,
     validate_project,
     write_chapters,
 )
@@ -193,6 +194,37 @@ class ProjectRulesTest(unittest.TestCase):
         )
         self.assertIn(r'D:\OFFline\Videos', launcher)
         self.assertIn("FolderExists(startFolder)", launcher)
+
+    def test_media_bounds_reject_corrupted_markers(self):
+        project = sample_project()
+        project["audio_duration_seconds"] = 300.0
+        project["tracks"][0]["start_tascam"] = 2_497.0
+        project["last_end_tascam"] = 10_726.0
+        with self.assertRaisesRegex(ValueError, "Reparar marcações"):
+            validate_media_bounds(project)
+
+    def test_timeline_repair_archives_and_redistributes_enabled_tracks(self):
+        project = sample_project()
+        project["camera_duration_seconds"] = 1_637.182
+        project["audio_duration_seconds"] = 1_645.793
+        project["tracks"][0]["start_tascam"] = 2_497.0
+        project["tracks"][1]["start_tascam"] = 3_687.0
+        project["last_end_tascam"] = 10_726.0
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = CoralApplication.__new__(CoralApplication)
+            app.work_dir = root
+            app.project_path = root / "projeto.json"
+            app.chapters_path = root / "capitulos.txt"
+            app.ass_path = root / "legendas.ass"
+            app.project_path.write_text(json.dumps(project), encoding="utf-8")
+            backup = app.repair_timeline()
+            repaired = json.loads(app.project_path.read_text(encoding="utf-8"))
+        self.assertTrue(backup.name.startswith("projeto_antes_reparo_"))
+        self.assertEqual(repaired["tracks"][0]["start_tascam"], 10.0)
+        self.assertLess(repaired["tracks"][-1]["start_tascam"], 1_637.182)
+        self.assertFalse(repaired["tracks"][0]["confirmed"])
+        self.assertFalse(repaired["last_end_confirmed"])
 
 
 if __name__ == "__main__":

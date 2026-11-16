@@ -1,0 +1,56 @@
+{
+  "schema": "concertos-coral-project-v2",
+  "app_version": "2.0.0",
+  "event": "Novo concerto",
+  "event_date": "",
+  "choir": "Coral Paineiras",
+  "notice": "Revise sincronismo, repertório, enquadramento e cortes antes da exportação.",
+  "chapter_opening": "Abertura - Novo concerto",
+  "source_folder": "",
+  "camera_files": [],
+  "audio_file": "",
+  "sync": {
+    "offset_seconds": 0.0,
+    "clock_ratio": 1.0,
+    "video_pts_offset": 0.0
+  },
+  "source_video": {
+    "width": 1920,
+    "height": 1080,
+    "frame_rate": "30000/1001",
+    "interlaced": true
+  },
+  "crop": {
+    "width": 1920,
+    "height": 1080,
+    "x": 0,
+    "y": 0
+  },
+  "trim": {
+    "before_seconds": 10.0,
+    "after_seconds": 10.0
+  },
+  "audio_gain_db": null,
+  "overlay_enabled": true,
+  "overlay_duration_seconds": 7.0,
+  "tracks": [
+    {
+      "id": "musica-1",
+      "kind": "music",
+      "title": "Primeira música",
+      "credits": "",
+      "start_tascam": 60.0,
+      "enabled": true
+    }
+  ],
+  "last_end_tascam": 120.0,
+  "export": {
+    "width": 1920,
+    "height": 1080,
+    "video_crf": 18,
+    "video_preset": "slow",
+    "audio_bitrate": "384k",
+    "duration_tolerance_seconds": 0.5
+  },
+  "output_file": "Coral_Paineiras_Concerto.mp4"
+}

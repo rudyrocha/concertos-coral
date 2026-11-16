@@ -8,6 +8,7 @@ origem nunca são alterados. A interface é servida apenas em 127.0.0.1.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import datetime as dt
 import json
 import os
@@ -18,6 +19,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 import uuid
 import webbrowser
 import zipfile
@@ -27,7 +29,9 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
+APP_ID = "concertos-coral"
+DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
 WORK_FOLDER_NAME = "_CoralEditor"
 PROJECT_FILE_NAME = "projeto.json"
@@ -39,8 +43,40 @@ REPORT_FILE_NAME = "relatorio_exportacao.json"
 
 
 def fail(message: str, code: int = 1) -> None:
-    print(f"\nERRO: {message}", file=sys.stderr)
+    if sys.platform == "win32" and getattr(sys, "stderr", None) is None:
+        try:
+            ctypes.windll.user32.MessageBoxW(0, message, "Editor de Concertos", 0x10)
+        except Exception:
+            pass
+    else:
+        print(f"\nERRO: {message}", file=sys.stderr)
     raise SystemExit(code)
+
+
+def hidden_startupinfo() -> Any:
+    """Solicita janela oculta para subprocessos no Windows."""
+    if sys.platform != "win32":
+        return None
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = 0
+    return startup
+
+
+def hidden_process_kwargs() -> dict[str, Any]:
+    """Impede console e entrada interativa em FFmpeg/FFprobe no Windows."""
+    return {
+        "stdin": subprocess.DEVNULL,
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        "startupinfo": hidden_startupinfo(),
+    }
+
+
+def add_nostdin(command: list[str]) -> list[str]:
+    command = list(command)
+    if command and Path(str(command[0])).stem.lower() == "ffmpeg" and "-nostdin" not in command:
+        command.insert(1, "-nostdin")
+    return command
 
 
 def locate_tool(name: str, script_dir: Path) -> str:
@@ -310,6 +346,7 @@ def probe_duration(ffprobe: str, path: Path) -> float:
         encoding="utf-8",
         errors="replace",
         check=False,
+        **hidden_process_kwargs(),
     )
     if completed.returncode != 0:
         raise RuntimeError(f"Não foi possível medir a duração de {path.name}.")
@@ -318,7 +355,7 @@ def probe_duration(ffprobe: str, path: Path) -> float:
 
 def detect_peak_gain(ffmpeg: str, audio_path: Path, project: dict[str, Any], log_path: Path) -> float:
     timing = source_times(project)
-    command = [
+    command = add_nostdin([
         ffmpeg,
         "-hide_banner",
         "-nostats",
@@ -333,7 +370,7 @@ def detect_peak_gain(ffmpeg: str, audio_path: Path, project: dict[str, Any], log
         "-f",
         "null",
         "-",
-    ]
+    ])
     completed = subprocess.run(
         command,
         stdout=subprocess.PIPE,
@@ -342,6 +379,7 @@ def detect_peak_gain(ffmpeg: str, audio_path: Path, project: dict[str, Any], log
         encoding="utf-8",
         errors="replace",
         check=False,
+        **hidden_process_kwargs(),
     )
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write("\n[Análise de pico]\n")
@@ -428,6 +466,7 @@ class CoralApplication:
         self.final_dir.mkdir(exist_ok=True)
         self.project_path = self.work_dir / PROJECT_FILE_NAME
         self.html_path = script_dir / "editor.html"
+        self.logo_path = script_dir / "assets" / "Logo_Clube.png"
         self.preview_path = self.work_dir / PREVIEW_FILE_NAME
         self.ass_path = self.work_dir / ASS_FILE_NAME
         self.chapters_path = self.work_dir / CHAPTERS_FILE_NAME
@@ -569,7 +608,7 @@ class CoralApplication:
 
     def ffmpeg_command(self, project: dict[str, Any], final: bool, output: Path) -> list[str]:
         export = project.get("export", {})
-        command = [
+        command = add_nostdin([
             self.ffmpeg,
             "-hide_banner",
             "-y",
@@ -583,7 +622,7 @@ class CoralApplication:
             "[v]",
             "-map",
             "[a]",
-        ]
+        ])
         if final:
             command.extend(
                 [
@@ -710,6 +749,7 @@ class CoralApplication:
                     encoding="utf-8",
                     errors="replace",
                     bufsize=1,
+                    **hidden_process_kwargs(),
                 )
                 assert process.stdout is not None
                 for line in process.stdout:
@@ -783,6 +823,18 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def serve_binary(self, path: Path, content_type: str) -> None:
+        if not path.is_file():
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        payload = path.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(payload)
+
     def serve_file_with_range(self, path: Path, content_type: str) -> None:
         if not path.is_file():
             self.send_error(HTTPStatus.NOT_FOUND, "Arquivo ainda não foi gerado.")
@@ -831,6 +883,16 @@ class RequestHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/":
             self.send_text(self.app.html_path.read_text(encoding="utf-8"))
+        elif parsed.path == "/assets/logo.png":
+            self.serve_binary(self.app.logo_path, "image/png")
+        elif parsed.path == "/api/identity":
+            self.send_json(
+                {
+                    "app": APP_ID,
+                    "version": VERSION,
+                    "source_folder": str(self.app.source),
+                }
+            )
         elif parsed.path == "/api/project":
             self.send_json(self.app.public_project())
         elif parsed.path == "/api/status":
@@ -855,6 +917,11 @@ class RequestHandler(BaseHTTPRequestHandler):
             elif self.path == "/api/render-preview":
                 self.app.start_render(final=False)
                 self.send_json({"ok": True}, HTTPStatus.ACCEPTED)
+            elif self.path == "/api/shutdown":
+                if self.app.state.snapshot()["running"]:
+                    raise RuntimeError("Aguarde o término da renderização antes de encerrar.")
+                self.send_json({"ok": True, "message": "Editor encerrado."})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except (ValueError, KeyError, TypeError, RuntimeError) as exc:
@@ -877,12 +944,29 @@ def wait_for_render(app: CoralApplication) -> None:
         print(f"Arquivo do projeto: {state['archive']}")
 
 
+def running_instance(port: int) -> dict[str, Any] | None:
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/api/identity", timeout=0.8
+        ) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None
+
+
+def same_path(left: str | Path, right: str | Path) -> bool:
+    return os.path.normcase(os.path.abspath(str(left))) == os.path.normcase(
+        os.path.abspath(str(right))
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=f"Editor de concertos corais v{VERSION}")
     parser.add_argument("--source", required=True, help="Pasta do concerto")
     parser.add_argument("--archive-root", help="Pasta externa para os ZIPs pequenos de projeto")
     parser.add_argument("--prepare-only", action="store_true", help="Gera somente a prévia")
     parser.add_argument("--render-final", action="store_true", help="Renderiza sem abrir a interface")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Porta local fixa")
     args = parser.parse_args()
 
     source = Path(args.source).expanduser()
@@ -891,6 +975,19 @@ def main() -> None:
     source = source.resolve()
     archive_root = Path(args.archive_root).expanduser().resolve() if args.archive_root else None
     script_dir = Path(__file__).resolve().parent
+
+    if not args.prepare_only and not args.render_final:
+        existing = running_instance(args.port)
+        if existing and existing.get("app") == APP_ID:
+            if same_path(existing.get("source_folder", ""), source):
+                url = f"http://127.0.0.1:{args.port}/"
+                webbrowser.open(url)
+                print(f"O editor já estava aberto. Reutilizando: {url}")
+                return
+            fail(
+                "Já existe um Editor de Concertos aberto para outra pasta. "
+                "Use o botão Encerrar no editor atual antes de abrir outro concerto."
+            )
     app = CoralApplication(source, script_dir, archive_root)
 
     if args.render_final:
@@ -906,16 +1003,14 @@ def main() -> None:
         return
 
     RequestHandler.app = app
-    server = None
-    for port in range(8765, 8786):
-        try:
-            server = ThreadingHTTPServer(("127.0.0.1", port), RequestHandler)
-            break
-        except OSError:
-            continue
-    if server is None:
-        fail("Não foi possível abrir uma porta local entre 8765 e 8785.")
-    url = f"http://127.0.0.1:{server.server_port}/"
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), RequestHandler)
+    except OSError:
+        fail(
+            f"A porta local {args.port} está ocupada. Encerre a instância anterior "
+            "do editor e tente novamente."
+        )
+    url = f"http://127.0.0.1:{args.port}/"
     print(f"Editor aberto em: {url}")
     print("Mantenha esta janela aberta. Use Ctrl+C para encerrar.")
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()

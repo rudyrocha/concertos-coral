@@ -9,7 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from coral_editor import (  # noqa: E402
     SCHEMA,
+    add_nostdin,
     final_time,
+    hidden_process_kwargs,
     migrate_project,
     source_times,
     validate_project,
@@ -42,6 +44,18 @@ def sample_project():
 
 
 class ProjectRulesTest(unittest.TestCase):
+    def test_ffmpeg_receives_nostdin(self):
+        command = add_nostdin(["ffmpeg", "-i", "entrada.wav"])
+        self.assertEqual(command[1], "-nostdin")
+        self.assertEqual(command.count("-nostdin"), 1)
+        self.assertEqual(add_nostdin(command).count("-nostdin"), 1)
+
+    def test_hidden_process_disables_stdin(self):
+        kwargs = hidden_process_kwargs()
+        self.assertIsNotNone(kwargs["stdin"])
+        self.assertIn("creationflags", kwargs)
+        self.assertIn("startupinfo", kwargs)
+
     def test_time_mapping_and_duration(self):
         project = sample_project()
         times = source_times(project)

@@ -8,3 +8,4 @@ _CoralEditor_Arquivos/
 *.mp4
 *.parcial.*
 dist/
+.venv/

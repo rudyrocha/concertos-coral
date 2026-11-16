@@ -50,6 +50,14 @@ O PDF do programa não é interpretado diretamente pelo editor nesta versão. A 
 - registrar o resultado em `relatorio_exportacao.json`;
 - gerar ZIP externo sem arquivos de mídia.
 
+### Operação no Windows
+
+- abrir por atalho na Área de Trabalho com o logo do Clube Paineiras;
+- selecionar a pasta do concerto em uma janela nativa;
+- não exibir consoles do Python, FFmpeg ou FFprobe durante o uso normal;
+- manter uma única instância na porta local 8765;
+- oferecer encerramento explícito pela interface.
+
 ## Regras de validação
 
 - pelo menos uma música habilitada;
@@ -69,6 +77,8 @@ O PDF do programa não é interpretado diretamente pelo editor nesta versão. A 
 5. Alterações de limites temporais indicam que a prévia precisa ser regenerada.
 6. Ao final da exportação, a diferença de duração é exibida e registrada.
 7. O ZIP externo é criado sem conter MP4, MTS, M2TS ou WAV.
+8. Abrir novamente o mesmo concerto reutiliza a instância existente; outro concerto é recusado até o encerramento.
+9. FFmpeg e FFprobe não abrem janelas nem recebem teclas do usuário no Windows.
 
 ## Limitações conhecidas
 

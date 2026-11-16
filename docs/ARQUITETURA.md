@@ -4,6 +4,8 @@
 
 `coral_editor.py` concentra a lógica de projeto, validação, comandos FFmpeg, servidor local e arquivamento. `editor.html` contém a interface e usa apenas JavaScript nativo. Não há dependências Python externas.
 
+No Windows, `Editor de Concertos.vbs` inicia `pythonw.exe` sem console permanente e abre um seletor de pasta. `instalar.bat` cria a `.venv`; `Criar atalho do Editor.bat` instala o atalho com o ícone do Clube Paineiras.
+
 ```mermaid
 flowchart TD
     A["MTS/M2TS + WAV"] --> B["Projeto JSON"]
@@ -15,6 +17,10 @@ flowchart TD
     F --> G["FFprobe: validação"]
     G --> H["ZIP pequeno externo"]
 ```
+
+## Serviço local e instância única
+
+O servidor escuta apenas `127.0.0.1:8765`. Um novo lançamento consulta `/api/identity`: se a mesma pasta já estiver aberta, somente reabre o navegador; se for outro concerto, solicita o encerramento da instância atual. O endpoint `/api/shutdown`, acionado por **Encerrar editor**, recusa o desligamento durante renderização e libera o socket ao terminar.
 
 ## Modelo temporal
 
@@ -47,6 +53,8 @@ O pipeline de vídeo aplica, conforme o projeto:
 5. H.264 em uma única recodificação.
 
 O áudio do Tascam passa por trim, reamostragem para 48 kHz, correção linear de relógio e ganho global. O áudio da câmera não é mapeado para a saída.
+
+Todos os processos FFmpeg e FFprobe recebem entrada padrão desabilitada. No Windows, usam `CREATE_NO_WINDOW` e `STARTUPINFO` oculto; comandos FFmpeg também recebem `-nostdin`. Logs e erros continuam preservados.
 
 ## Compatibilidade
 

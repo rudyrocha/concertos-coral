@@ -17,12 +17,23 @@ O sistema preserva os arquivos originais. Todo o processamento ocorre no computa
 - ZIP pequeno de arquivamento, sem vídeo nem prévia, salvo fora da pasta do concerto;
 - migração automática de projetos criados pela versão 1.
 
+## Instalação e atalho no Windows
+
+1. Baixe o ZIP do repositório e extraia-o em uma pasta permanente.
+2. Execute `instalar.bat`.
+3. O instalador valida Python e FFmpeg, cria um ambiente isolado e instala na Área de Trabalho o atalho **Editor de Concertos**.
+4. Ao abrir o atalho, selecione a pasta do concerto.
+
+O atalho usa o logo do Clube Paineiras e inicia o aplicativo sem janela de terminal permanente. FFmpeg e FFprobe também são executados sem janelas e sem acesso ao teclado.
+
 ## Requisitos
 
 - Windows 10 ou 11;
 - Python 3.10 ou posterior;
 - FFmpeg e FFprobe com `libx264` e `libass` disponíveis no `PATH`, ou os executáveis na pasta do editor;
 - navegador moderno.
+
+O editor mantém uma única instância na porta local `8765`. Para trocar de concerto, use **Encerrar editor** na interface e abra novamente pelo atalho.
 
 ## Uso em um novo concerto
 
@@ -90,4 +101,4 @@ python coral_editor.py --source "D:\Caminho\Do Concerto" --archive-root "D:\Proj
 - o editor bloqueia projetos sem música, com marcadores fora de ordem ou recorte inválido;
 - um alerta de duração não apaga o vídeo: ele registra a divergência para conferência.
 
-Consulte [Especificação da versão 2](docs/ESPECIFICACAO_V2.md), [Arquitetura](docs/ARQUITETURA.md) e [Procedimento por concerto](docs/PROCEDIMENTO_CONCERTO.md).
+Consulte [Especificação da versão 2](docs/ESPECIFICACAO_V2.md), [Arquitetura](docs/ARQUITETURA.md), [Procedimento por concerto](docs/PROCEDIMENTO_CONCERTO.md) e [Requisitos operacionais](docs/REQUISITOS_OPERACIONAIS.md).

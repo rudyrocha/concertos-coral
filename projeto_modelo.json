@@ -1,6 +1,9 @@
 {
   "schema": "concertos-coral-project-v2",
-  "app_version": "2.1.0",
+  "app_version": "2.2.0",
+  "setup_complete": false,
+  "bootstrap_completed": false,
+  "preview_needs_regeneration": true,
   "event": "Novo concerto",
   "event_date": "",
   "choir": "Coral Paineiras",
@@ -40,10 +43,12 @@
       "title": "Primeira música",
       "credits": "",
       "start_tascam": 60.0,
-      "enabled": true
+      "enabled": true,
+      "confirmed": false
     }
   ],
   "last_end_tascam": 120.0,
+  "last_end_confirmed": false,
   "export": {
     "width": 1920,
     "height": 1080,

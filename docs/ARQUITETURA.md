@@ -8,12 +8,12 @@ No Windows, `Editor de Concertos.vbs` inicia `pythonw.exe` sem console permanent
 
 ```mermaid
 flowchart TD
-    A["MTS/M2TS + WAV"] --> B["Projeto JSON"]
-    B --> C["Servidor Python local"]
-    C --> D["Interface no navegador"]
-    D -->|salvar| B
-    C --> E["FFmpeg: prévia sem recorte"]
-    C --> F["FFmpeg: vídeo final"]
+    A["MTS/M2TS + WAV + MD"] --> B["Preparação automática"]
+    B --> C["Projeto JSON"]
+    C --> D["Servidor Python local"]
+    D --> E["Interface no navegador"]
+    E -->|salvar| C
+    D --> F["FFmpeg: prévia e vídeo final"]
     F --> G["FFprobe: validação"]
     G --> H["ZIP pequeno externo"]
 ```
@@ -31,6 +31,8 @@ tascam = offset + clock_ratio × camera
 ```
 
 Os marcadores de música e o fim musical são armazenados em segundos absolutos do Tascam. As margens de corte são convertidas para cada relógio antes de construir os filtros.
+
+Na primeira abertura sem projeto analisado, o editor mede as fontes, importa Markdown/TXT e estima o deslocamento inicial comparando envelopes de energia. Os marcadores musicais são distribuídos provisoriamente pela duração disponível e permanecem bloqueantes até confirmação na interface.
 
 ## Prévia e enquadramento
 

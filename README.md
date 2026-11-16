@@ -4,8 +4,13 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2
+## Principais recursos da versão 2.2
 
+- leitura automática do repertório em Markdown ou TXT na pasta do concerto;
+- primeira prévia baseada na duração real da gravação, nunca nos marcadores do modelo;
+- estimativa inicial de sincronismo entre o áudio da câmera e o Tascam;
+- marcações importadas claramente identificadas como provisórias;
+- bloqueio da exportação final até a confirmação de todos os marcadores;
 - inclusão, exclusão e reordenação de músicas;
 - inclusão de músicas não previstas e BIS no ponto atual do vídeo;
 - ajuste visual de zoom e posição do quadro sobre a prévia;
@@ -37,22 +42,22 @@ O editor mantém uma única instância na porta local `8765`. Para trocar de con
 
 ## Uso em um novo concerto
 
-1. Reúna em uma única pasta todos os arquivos MTS/M2TS, um único WAV do Tascam, o programa em PDF e, se necessário, `observacoes.txt`.
-2. Gere e analise o pacote diagnóstico para obter sincronismo, deriva, repertório inicial e características da câmera.
-3. Coloque na pasta do concerto o arquivo analisado com o nome `projeto_inicial.json`.
-4. Arraste a pasta do concerto sobre `Iniciar_Editor.bat`.
-5. Aguarde a geração da primeira prévia.
-6. Revise, nesta ordem:
+1. Reúna em uma única pasta todos os arquivos MTS/M2TS e um único WAV do Tascam.
+2. Salve o repertório ordenado em um arquivo Markdown (`.md`) ou texto (`.txt`). Use uma música por item numerado ou com marcador. Separe os créditos com `—` ou `|`.
+3. Abra **Editor de Concertos** pela Área de Trabalho e selecione a pasta.
+4. O editor identifica a duração real, importa o repertório, estima o sincronismo e gera uma prévia de toda a apresentação.
+5. Revise, nesta ordem:
    - enquadramento;
    - sincronismo por amostragem no início, meio e fim;
    - músicas, músicas extras e BIS;
    - início da primeira música e fim musical da última;
    - margens de corte;
    - cartelas e capítulos.
-7. Salve e renderize o vídeo final.
+6. Em cada música, posicione a reprodução no início e clique em **Marcar aqui**. Faça o mesmo em **Marcar fim aqui** ao final da última apresentação.
+7. Salve, regenere a prévia se alterou sincronismo ou cortes e renderize o vídeo final.
 8. Confira no painel a validação de duração e os caminhos do vídeo e do ZIP do projeto.
 
-Se não existir `projeto_inicial.json`, o editor usa `projeto_modelo.json`. Nesse caso, os valores de sincronismo e os marcadores são apenas provisórios e precisam ser substituídos antes da exportação.
+Um `projeto_inicial.json` analisado externamente continua sendo aceito. Sem ele, a configuração inicial é feita automaticamente. Os marcadores distribuídos pelo editor são sugestões de navegação, não reconhecimento musical; a exportação final só é liberada após confirmação humana.
 
 ## Pastas geradas
 

@@ -8,9 +8,11 @@ origem nunca são alterados. A interface é servida apenas em 127.0.0.1.
 from __future__ import annotations
 
 import argparse
+import array
 import ctypes
 import datetime as dt
 import json
+import math
 import os
 import re
 import shutil
@@ -29,7 +31,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -198,9 +200,6 @@ def final_time(project: dict[str, Any], absolute_tascam: float) -> float:
 def migrate_project(project: dict[str, Any]) -> dict[str, Any]:
     """Converte projetos da primeira versão sem perder dados do concerto."""
     migrated = json.loads(json.dumps(project))
-    if migrated.get("schema") == SCHEMA:
-        return migrated
-
     migrated["schema"] = SCHEMA
     migrated.setdefault("app_version", VERSION)
     migrated.setdefault("choir", "Coral Paineiras")
@@ -233,6 +232,10 @@ def migrate_project(project: dict[str, Any]) -> dict[str, Any]:
         track.setdefault("enabled", True)
         track.setdefault("title", f"Música {position}")
         track.setdefault("credits", "")
+        track.setdefault("confirmed", True)
+    migrated.setdefault("last_end_confirmed", True)
+    migrated.setdefault("setup_complete", True)
+    migrated.setdefault("preview_needs_regeneration", False)
     migrated["app_version"] = VERSION
     return migrated
 
@@ -316,6 +319,334 @@ def resolve_sources(project: dict[str, Any], source: Path) -> tuple[list[Path], 
     project["camera_files"] = [path.name for path in camera]
     project["audio_file"] = wavs[0].name
     return camera, wavs[0]
+
+
+def _clean_markdown(value: str) -> str:
+    value = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", value)
+    value = re.sub(r"[*_`]+", "", value)
+    return value.strip().strip("|").strip()
+
+
+def _split_repertoire_entry(value: str) -> tuple[str, str]:
+    value = _clean_markdown(value)
+    for separator in (" | ", " — ", " – ", " :: "):
+        if separator in value:
+            title, credits = value.split(separator, 1)
+            return title.strip(), credits.strip()
+    return value, ""
+
+
+def parse_repertoire_text(text: str) -> list[dict[str, str]]:
+    """Extrai uma lista ordenada simples de um Markdown ou TXT."""
+    list_entries: list[str] = []
+    table_entries: list[str] = []
+    heading_entries: list[str] = []
+    general = re.compile(
+        r"^(repert[oó]rio|programa|m[uú]sicas?|ordem|concerto|coral|observa[cç][oõ]es?)\b",
+        re.IGNORECASE,
+    )
+    for raw_line in text.replace("\r\n", "\n").split("\n"):
+        line = raw_line.strip()
+        if not line or line.startswith("<!--") or line.startswith("```"):
+            continue
+        match = re.match(r"^(?:[-*+]\s+|\d+[.)]\s+)(.+)$", line)
+        if match:
+            list_entries.append(match.group(1).strip())
+            continue
+        if line.startswith("|") and line.count("|") >= 2:
+            cells = [_clean_markdown(cell) for cell in line.strip("|").split("|")]
+            if cells and not all(re.fullmatch(r":?-{2,}:?", cell or "-") for cell in cells):
+                first = cells[0].strip()
+                if first and not re.search(r"^(ordem|n[ºo]?|t[ií]tulo|m[uú]sica)$", first, re.I):
+                    table_entries.append(" | ".join(cell for cell in cells if cell))
+            continue
+        heading = re.match(r"^#{2,6}\s+(.+)$", line)
+        if heading and not general.match(_clean_markdown(heading.group(1))):
+            heading_entries.append(heading.group(1).strip())
+
+    entries = list_entries or table_entries or heading_entries
+    if not entries:
+        for raw_line in text.replace("\r\n", "\n").split("\n"):
+            line = _clean_markdown(raw_line.lstrip("# ").strip())
+            if not line or general.match(line) or line.startswith("---"):
+                continue
+            entries.append(line)
+
+    tracks: list[dict[str, str]] = []
+    for entry in entries:
+        title, credits = _split_repertoire_entry(entry)
+        if title and not re.fullmatch(r"[-:| ]+", title):
+            tracks.append({"title": title, "credits": credits})
+    return tracks
+
+
+def discover_repertoire(source: Path) -> tuple[Path | None, list[dict[str, str]]]:
+    candidates = [
+        path
+        for pattern in ("*.md", "*.MD", "*.txt", "*.TXT")
+        for path in source.glob(pattern)
+        if path.is_file() and not path.name.lower().startswith(("readme", "observacoes", "observações"))
+    ]
+    keywords = ("repert", "musica", "música", "programa", "ordem", "lista")
+    candidates.sort(
+        key=lambda path: (
+            -sum(keyword in path.name.lower() for keyword in keywords),
+            path.name.lower(),
+        )
+    )
+    for path in candidates:
+        try:
+            tracks = parse_repertoire_text(path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeError):
+            continue
+        if tracks:
+            return path, tracks
+    return None, []
+
+
+def is_placeholder_project(project: dict[str, Any]) -> bool:
+    if project.get("bootstrap_completed"):
+        return False
+    tracks = project.get("tracks", [])
+    if project.get("setup_complete") is False:
+        return True
+    return (
+        str(project.get("event", "")).strip().lower() == "novo concerto"
+        and len(tracks) == 1
+        and str(tracks[0].get("title", "")).strip().lower() == "primeira música"
+        and abs(float(tracks[0].get("start_tascam", 0)) - 60.0) < 0.001
+        and abs(float(project.get("last_end_tascam", 0)) - 120.0) < 0.001
+    )
+
+
+def probe_video_info(ffprobe: str, path: Path) -> dict[str, Any]:
+    completed = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,avg_frame_rate,field_order",
+            "-of",
+            "json",
+            str(path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        **hidden_process_kwargs(),
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"Não foi possível analisar o vídeo {path.name}.")
+    streams = json.loads(completed.stdout or "{}").get("streams", [])
+    if not streams:
+        raise RuntimeError(f"Nenhuma faixa de vídeo encontrada em {path.name}.")
+    stream = streams[0]
+    field_order = str(stream.get("field_order", "unknown")).lower()
+    return {
+        "width": int(stream["width"]),
+        "height": int(stream["height"]),
+        "frame_rate": str(stream.get("avg_frame_rate") or "30000/1001"),
+        "interlaced": field_order not in ("progressive", "unknown", ""),
+        "field_order": field_order,
+    }
+
+
+def _audio_envelope(ffmpeg: str, input_path: str, sample_rate: int = 200) -> list[float]:
+    command = add_nostdin(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            input_path,
+            "-map",
+            "0:a:0",
+            "-ac",
+            "1",
+            "-ar",
+            str(sample_rate),
+            "-f",
+            "s16le",
+            "pipe:1",
+        ]
+    )
+    completed = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        **hidden_process_kwargs(),
+    )
+    if completed.returncode != 0 or not completed.stdout:
+        detail = completed.stderr.decode("utf-8", errors="replace")[-1200:]
+        raise RuntimeError(f"Falha ao extrair áudio para sincronização. {detail}")
+    samples = array.array("h")
+    samples.frombytes(completed.stdout)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    window = max(1, sample_rate // 20)
+    envelope: list[float] = []
+    for index in range(0, len(samples) - window + 1, window):
+        block = samples[index : index + window]
+        rms = math.sqrt(sum(float(value) * float(value) for value in block) / len(block))
+        envelope.append(math.log1p(rms))
+    return envelope
+
+
+def _normalized(values: list[float]) -> list[float]:
+    if len(values) < 3:
+        return values
+    changes = [values[index] - values[index - 1] for index in range(1, len(values))]
+    mean = sum(changes) / len(changes)
+    variance = sum((value - mean) ** 2 for value in changes) / len(changes)
+    scale = math.sqrt(variance) or 1.0
+    return [(value - mean) / scale for value in changes]
+
+
+def _best_lag(
+    camera: list[float], tascam: list[float], minimum: int, maximum: int, min_overlap: int
+) -> tuple[int, float]:
+    best_lag = 0
+    best_score = -2.0
+    for lag in range(minimum, maximum + 1):
+        camera_start = max(0, -lag)
+        tascam_start = max(0, lag)
+        overlap = min(len(camera) - camera_start, len(tascam) - tascam_start)
+        if overlap < min_overlap:
+            continue
+        dot = 0.0
+        camera_power = 0.0
+        tascam_power = 0.0
+        for offset in range(overlap):
+            left = camera[camera_start + offset]
+            right = tascam[tascam_start + offset]
+            dot += left * right
+            camera_power += left * left
+            tascam_power += right * right
+        denominator = math.sqrt(camera_power * tascam_power)
+        score = dot / denominator if denominator else -2.0
+        if score > best_score:
+            best_lag, best_score = lag, score
+    return best_lag, best_score
+
+
+def estimate_sync_offset(ffmpeg: str, camera_paths: list[Path], audio_path: Path) -> tuple[float, float]:
+    """Estima tascam_time = camera_time + offset por envelopes de energia."""
+    camera = _normalized(_audio_envelope(ffmpeg, concat_protocol_url(camera_paths)))
+    tascam = _normalized(_audio_envelope(ffmpeg, str(audio_path)))
+    if min(len(camera), len(tascam)) < 400:
+        raise RuntimeError("Gravação curta demais para sincronização automática.")
+
+    coarse_camera = camera[::5]
+    coarse_tascam = tascam[::5]
+    coarse_rate = 4
+    max_lag = min(120 * coarse_rate, max(len(coarse_camera), len(coarse_tascam)) // 2)
+    min_overlap = min(len(coarse_camera), len(coarse_tascam), 60 * coarse_rate)
+    coarse_lag, _ = _best_lag(
+        coarse_camera, coarse_tascam, -max_lag, max_lag, max(80, min_overlap)
+    )
+    center = coarse_lag * 5
+    refined_lag, score = _best_lag(
+        camera,
+        tascam,
+        center - 25,
+        center + 25,
+        max(400, min(len(camera), len(tascam)) // 3),
+    )
+    return round(refined_lag / 20.0, 3), round(score, 4)
+
+
+def bootstrap_project(
+    project: dict[str, Any],
+    source: Path,
+    camera_paths: list[Path],
+    audio_path: Path,
+    ffmpeg: str,
+    ffprobe: str,
+) -> dict[str, Any]:
+    """Substitui os marcadores fictícios por uma configuração inicial real."""
+    camera_duration = sum(probe_duration(ffprobe, path) for path in camera_paths)
+    audio_duration = probe_duration(ffprobe, audio_path)
+    video_info = probe_video_info(ffprobe, camera_paths[0])
+    repertoire_path, repertoire = discover_repertoire(source)
+    if not repertoire:
+        repertoire = [{"title": "Música 1", "credits": ""}]
+
+    try:
+        offset, confidence = estimate_sync_offset(ffmpeg, camera_paths, audio_path)
+    except Exception:
+        offset, confidence = 0.0, 0.0
+    # O procedimento normal inicia o Tascam antes da câmera. Correlações fracas
+    # ou negativas não são seguras o bastante para definir o corte inicial.
+    if offset < 0 or confidence < 0.12:
+        offset, confidence = 0.0, 0.0
+    available_camera = min(camera_duration, max(1.0, audio_duration - max(0.0, offset)))
+    margin = min(10.0, max(1.0, available_camera / 20.0))
+    span = max(1.0, available_camera - 2 * margin)
+    track_count = len(repertoire)
+    tracks: list[dict[str, Any]] = []
+    for index, item in enumerate(repertoire):
+        camera_time = margin + span * index / max(1, track_count)
+        tracks.append(
+            {
+                "id": str(uuid.uuid4()),
+                "kind": "music",
+                "title": item["title"],
+                "credits": item.get("credits", ""),
+                "start_tascam": round(offset + camera_time, 3),
+                "enabled": True,
+                "confirmed": False,
+            }
+        )
+
+    project["event"] = source.name
+    project["chapter_opening"] = f"Abertura - {source.name}"
+    project["source_video"] = video_info
+    project["crop"] = {
+        "width": video_info["width"] - video_info["width"] % 2,
+        "height": video_info["height"] - video_info["height"] % 2,
+        "x": 0,
+        "y": 0,
+    }
+    project["export"]["width"] = project["crop"]["width"]
+    project["export"]["height"] = project["crop"]["height"]
+    project["sync"] = {
+        "offset_seconds": offset,
+        "clock_ratio": 1.0,
+        "video_pts_offset": 0.0,
+        "auto_estimated": True,
+        "confidence": confidence,
+    }
+    project["trim"] = {"before_seconds": margin, "after_seconds": margin}
+    project["tracks"] = tracks
+    project["last_end_tascam"] = round(offset + available_camera - margin, 3)
+    project["last_end_confirmed"] = False
+    project["setup_complete"] = False
+    project["bootstrap_completed"] = True
+    project["preview_needs_regeneration"] = True
+    project["camera_duration_seconds"] = round(camera_duration, 3)
+    project["audio_duration_seconds"] = round(audio_duration, 3)
+    project["repertoire_source"] = repertoire_path.name if repertoire_path else None
+    project["audio_gain_db"] = None
+    project["output_file"] = f"{slugify(source.name)}.mp4"
+    source_note = (
+        f"Repertório importado de {repertoire_path.name}. " if repertoire_path else
+        "Nenhum arquivo de repertório foi reconhecido; edite a lista manualmente. "
+    )
+    confidence_note = (
+        f"Sincronismo automático sugerido: {offset:+.3f} s (confiança {confidence:.2f})."
+        if confidence > 0
+        else "Sincronismo automático inconclusivo; confira câmera e Tascam."
+    )
+    project["notice"] = source_note + confidence_note + " Confirme todos os marcadores antes da exportação."
+    return project
 
 
 def concat_protocol_url(paths: Iterable[Path]) -> str:
@@ -486,6 +817,16 @@ class CoralApplication:
         self.project = migrate_project(raw_project)
         self.project["source_folder"] = str(source)
         self.camera_paths, self.audio_path = resolve_sources(self.project, source)
+        if is_placeholder_project(self.project):
+            print("Preparando concerto novo e importando o repertório...")
+            self.project = bootstrap_project(
+                self.project,
+                source,
+                self.camera_paths,
+                self.audio_path,
+                self.ffmpeg,
+                self.ffprobe,
+            )
         validate_project(self.project)
         if self.project.get("audio_gain_db") is None:
             print("Analisando o nível do áudio do Tascam...")
@@ -522,6 +863,9 @@ class CoralApplication:
             "final_folder": str(self.final_dir),
             "archive_folder": str(self.archive_root),
             "app_version": VERSION,
+            "pending_markers": sum(
+                1 for track in enabled_tracks(project) if not track.get("confirmed", False)
+            ) + (0 if project.get("last_end_confirmed", False) else 1),
         }
         return project
 
@@ -545,8 +889,18 @@ class CoralApplication:
                     "credits": str(item.get("credits", "")).strip(),
                     "start_tascam": float(item["start_tascam"]),
                     "enabled": bool(item.get("enabled", True)),
+                    "confirmed": bool(item.get("confirmed", False)),
                 }
             )
+        old_enabled = enabled_tracks(current)
+        previous_timing = (
+            float(current["sync"].get("offset_seconds", 0.0)),
+            float(current["sync"].get("clock_ratio", 1.0)),
+            float(current.get("trim", {}).get("before_seconds", 10.0)),
+            float(current.get("trim", {}).get("after_seconds", 10.0)),
+            float(current.get("last_end_tascam", 0.0)),
+            float(old_enabled[0]["start_tascam"]) if old_enabled else None,
+        )
         current["tracks"] = tracks
         current["event"] = str(payload.get("event", current.get("event", "Concerto"))).strip()
         current["event_date"] = str(payload.get("event_date", current.get("event_date", ""))).strip()
@@ -557,15 +911,35 @@ class CoralApplication:
         if not current["output_file"].lower().endswith(".mp4"):
             current["output_file"] += ".mp4"
         current["last_end_tascam"] = float(payload["last_end_tascam"])
+        current["last_end_confirmed"] = bool(payload.get("last_end_confirmed", False))
         current["overlay_enabled"] = bool(payload.get("overlay_enabled", True))
         current["audio_gain_db"] = float(payload.get("audio_gain_db", 0.0))
         current["trim"] = {
             "before_seconds": float(payload.get("trim_before_seconds", 10.0)),
             "after_seconds": float(payload.get("trim_after_seconds", 10.0)),
         }
+        current["sync"]["offset_seconds"] = float(
+            payload.get("sync_offset_seconds", current["sync"].get("offset_seconds", 0.0))
+        )
+        current["sync"]["clock_ratio"] = float(
+            payload.get("clock_ratio", current["sync"].get("clock_ratio", 1.0))
+        )
         crop = payload.get("crop", {})
         current["crop"] = {key: int(crop[key]) for key in ("width", "height", "x", "y")}
         current["app_version"] = VERSION
+        current["setup_complete"] = bool(current["last_end_confirmed"]) and all(
+            track.get("confirmed", False) for track in enabled_tracks(current)
+        )
+        new_timing = (
+            float(current["sync"].get("offset_seconds", 0.0)),
+            float(current["sync"].get("clock_ratio", 1.0)),
+            float(current["trim"]["before_seconds"]),
+            float(current["trim"]["after_seconds"]),
+            float(current["last_end_tascam"]),
+            float(enabled_tracks(current)[0]["start_tascam"]),
+        )
+        if new_timing != previous_timing:
+            current["preview_needs_regeneration"] = True
         validate_project(current)
         self.project = current
         atomic_write_json(self.project_path, current)
@@ -732,6 +1106,13 @@ class CoralApplication:
         )
         try:
             project = self.reload_project()
+            if final and not project.get("setup_complete", False):
+                pending = sum(
+                    1 for track in enabled_tracks(project) if not track.get("confirmed", False)
+                ) + (0 if project.get("last_end_confirmed", False) else 1)
+                raise RuntimeError(
+                    f"Confirme os {pending} marcadores pendentes antes da exportação final."
+                )
             self.write_outputs()
             timing = source_times(project)
             output = self.final_dir / project["output_file"] if final else self.preview_path
@@ -779,6 +1160,7 @@ class CoralApplication:
                     "audio_end_tascam": timing["audio_end"],
                     "uncropped": True,
                 }
+                project["preview_needs_regeneration"] = False
                 self.project = project
                 atomic_write_json(self.project_path, project)
             message = f"{kind.capitalize()} concluída."
@@ -994,7 +1376,7 @@ def main() -> None:
         app.start_render(final=True)
         wait_for_render(app)
         return
-    if not app.preview_path.exists():
+    if not app.preview_path.exists() or app.project.get("preview_needs_regeneration", False):
         print("A prévia ainda não existe. A geração pode levar vários minutos.")
         app.start_render(final=False)
         wait_for_render(app)

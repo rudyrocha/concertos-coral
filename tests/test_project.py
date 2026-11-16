@@ -9,10 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from coral_editor import (  # noqa: E402
     SCHEMA,
+    _best_lag,
     add_nostdin,
     final_time,
     hidden_process_kwargs,
+    is_placeholder_project,
     migrate_project,
+    parse_repertoire_text,
     source_times,
     validate_project,
     write_chapters,
@@ -107,6 +110,37 @@ class ProjectRulesTest(unittest.TestCase):
         self.assertIn("00:00 Abertura - Teste", text)
         self.assertIn("00:10 Faixa 1", text)
         self.assertIn("BIS", text)
+
+    def test_markdown_repertoire_numbered_list(self):
+        text = """# Programa\n\n1. Aquarela do Brasil — Ary Barroso\n2. Trem das Onze | Adoniran Barbosa\n3. BIS\n"""
+        tracks = parse_repertoire_text(text)
+        self.assertEqual([track["title"] for track in tracks], ["Aquarela do Brasil", "Trem das Onze", "BIS"])
+        self.assertEqual(tracks[0]["credits"], "Ary Barroso")
+        self.assertEqual(tracks[1]["credits"], "Adoniran Barbosa")
+
+    def test_placeholder_from_version_21_is_detected(self):
+        project = migrate_project(
+            {
+                "schema": SCHEMA,
+                "event": "Novo concerto",
+                "tracks": [
+                    {
+                        "title": "Primeira música",
+                        "start_tascam": 60.0,
+                        "enabled": True,
+                    }
+                ],
+                "last_end_tascam": 120.0,
+            }
+        )
+        self.assertTrue(is_placeholder_project(project))
+
+    def test_best_lag_reports_tascam_lead_in(self):
+        camera = [0.0, 1.0, -0.5, 0.25, 0.75, -1.0]
+        tascam = [0.3, -0.2, 0.1] + camera + [0.4]
+        lag, score = _best_lag(camera, tascam, -5, 5, 5)
+        self.assertEqual(lag, 3)
+        self.assertGreater(score, 0.99)
 
 
 if __name__ == "__main__":

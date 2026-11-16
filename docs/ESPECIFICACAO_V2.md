@@ -8,10 +8,10 @@ Transformar o editor específico do concerto *Estação Pais* em uma ferramenta 
 
 - uma sequência contínua de arquivos MTS ou M2TS da câmera;
 - exatamente um WAV principal do Tascam;
-- `projeto_inicial.json` com sincronismo e marcadores analisados;
-- programa do concerto e observações, usados na preparação do projeto inicial.
+- um arquivo Markdown ou TXT com as músicas na ordem, recomendado;
+- opcionalmente, `projeto_inicial.json` com dados previamente analisados.
 
-O PDF do programa não é interpretado diretamente pelo editor nesta versão. A extração e conferência do repertório permanecem na etapa de preparação.
+O PDF do programa não é interpretado diretamente. O editor lê listas numeradas, listas com marcadores e tabelas simples em Markdown/TXT. A leitura preserva a ordem, mas não identifica automaticamente o ponto musical no áudio.
 
 ## Requisitos implementados
 
@@ -24,6 +24,17 @@ O PDF do programa não é interpretado diretamente pelo editor nesta versão. A 
 - excluir e reordenar itens;
 - ordenar todo o repertório pelo timecode;
 - gerar capítulos e cartelas a partir da lista aprovada.
+- importar automaticamente o primeiro Markdown/TXT reconhecido na pasta do concerto;
+- marcar todos os timecodes estimados como pendentes até revisão humana.
+
+### Preparação automática
+
+- medir a duração total da sequência MTS/M2TS e do WAV;
+- analisar largura, altura, frame rate e entrelaçamento da câmera;
+- estimar o deslocamento inicial por correlação dos envelopes de áudio;
+- gerar a primeira prévia com a extensão real da gravação;
+- reaproveitar e corrigir automaticamente projetos ainda intactos da versão 2.1;
+- bloquear a exportação final enquanto houver início ou fim musical pendente.
 
 ### Enquadramento
 
@@ -79,11 +90,13 @@ O PDF do programa não é interpretado diretamente pelo editor nesta versão. A 
 7. O ZIP externo é criado sem conter MP4, MTS, M2TS ou WAV.
 8. Abrir novamente o mesmo concerto reutiliza a instância existente; outro concerto é recusado até o encerramento.
 9. FFmpeg e FFprobe não abrem janelas nem recebem teclas do usuário no Windows.
+10. Sem `projeto_inicial.json`, um concerto de dez minutos ou mais gera uma prévia próxima da duração real, e não a prévia de 80 segundos do modelo antigo.
+11. Um repertório Markdown é carregado na ordem e suas marcações ficam pendentes até confirmação.
 
 ## Limitações conhecidas
 
-- o sincronismo automático e a detecção de deriva continuam fora da interface principal;
-- o programa do concerto não é lido automaticamente pelo aplicativo;
-- não há reconhecimento automático das músicas;
+- o deslocamento inicial é estimado automaticamente, mas precisa ser conferido; a deriva não é estimada;
+- PDF não é lido automaticamente;
+- não há reconhecimento automático dos inícios das músicas;
 - saltos não lineares entre câmera e gravador exigem tratamento manual;
 - a validação de duração não substitui a conferência audiovisual do arquivo final.

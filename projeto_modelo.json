@@ -1,6 +1,6 @@
 {
   "schema": "concertos-coral-project-v2",
-  "app_version": "2.2.0",
+  "app_version": "2.3.0",
   "setup_complete": false,
   "bootstrap_completed": false,
   "preview_needs_regeneration": true,
@@ -34,6 +34,12 @@
     "after_seconds": 10.0
   },
   "audio_gain_db": null,
+  "audio_processing": {
+    "mode": "balanced",
+    "target_lufs": -16.0,
+    "loudness_range": 9.0,
+    "true_peak_db": -1.5
+  },
   "overlay_enabled": true,
   "overlay_duration_seconds": 7.0,
   "tracks": [

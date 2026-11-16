@@ -24,7 +24,11 @@ Abra o atalho **Editor de Concertos** e selecione a pasta. Na primeira abertura,
 
 Revise primeiro o enquadramento. Use “Ver quadro original” para enxergar a área descartada e “Ver resultado final” para avaliar a composição.
 
-Depois confira três pontos de sincronismo: início, meio e fim. Ajuste o deslocamento ou a correção de relógio se necessário e regenere a prévia.
+Depois confira três pontos de sincronismo: início, meio e fim.
+
+- Se a diferença for semelhante nos três pontos, ajuste **Deslocamento Tascam − câmera**.
+- Se o início estiver correto e a diferença crescer ao longo da apresentação, ajuste **Correção de relógio**.
+- Regenere a prévia depois de cada mudança. Se o valor informado for incompatível, a prévia anterior permanece disponível.
 
 Os marcadores iniciais importados são apenas estimativas distribuídas pela gravação. Para cada música:
 
@@ -40,6 +44,8 @@ Para música não prevista ou BIS:
 4. ordene por timecode, se necessário.
 
 Marque o fim musical da última apresentação e confira as margens. A exportação final só é liberada quando não houver marcações pendentes. Alterações de sincronismo ou corte exigem regenerar a prévia; alterações de enquadramento, não.
+
+Use inicialmente o tratamento de volume **Equilibrado**. Ele aproxima o programa de −16 LUFS e contém aplausos muito acima do coro. Escolha **Natural** apenas quando a gravação já estiver nivelada ou quando quiser preservar integralmente a dinâmica captada.
 
 ## 4. Exportar e validar
 

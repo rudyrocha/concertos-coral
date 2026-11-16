@@ -4,8 +4,12 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2.2
+## Principais recursos da versão 2.3
 
+- tratamento de volume equilibrado com compressão moderada e normalização EBU R128 em −16 LUFS;
+- opção de preservar o áudio natural usando somente o ganho global;
+- proteção contra prévia vazia ao alterar o deslocamento de sincronismo;
+- preservação automática da prévia anterior quando uma regeneração falha;
 - leitura automática do repertório em Markdown ou TXT na pasta do concerto;
 - primeira prévia baseada na duração real da gravação, nunca nos marcadores do modelo;
 - estimativa inicial de sincronismo entre o áudio da câmera e o Tascam;
@@ -21,6 +25,8 @@ O sistema preserva os arquivos originais. Todo o processamento ocorre no computa
 - validação da duração prevista contra a duração efetivamente exportada;
 - ZIP pequeno de arquivamento, sem vídeo nem prévia, salvo fora da pasta do concerto;
 - migração automática de projetos criados pela versão 1.
+
+O modo **Equilibrado** reduz a diferença excessiva entre músicas e aplausos sem tentar classificar automaticamente cada trecho. Essa abordagem evita que um crescendo do coro seja confundido com aplauso. O modo **Natural** permanece disponível para gravações que já estejam bem controladas.
 
 ## Instalação e atalho no Windows
 
@@ -56,6 +62,8 @@ O editor mantém uma única instância na porta local `8765`. Para trocar de con
 6. Em cada música, posicione a reprodução no início e clique em **Marcar aqui**. Faça o mesmo em **Marcar fim aqui** ao final da última apresentação.
 7. Salve, regenere a prévia se alterou sincronismo ou cortes e renderize o vídeo final.
 8. Confira no painel a validação de duração e os caminhos do vídeo e do ZIP do projeto.
+
+No sincronismo, use **Deslocamento Tascam − câmera** quando a diferença for aproximadamente constante durante todo o concerto. Se a diferença aumentar gradualmente do início para o fim, ajuste **Correção de relógio**. Ao informar um valor incompatível com as fontes, o editor recusa a nova prévia e mantém a anterior disponível.
 
 Um `projeto_inicial.json` analisado externamente continua sendo aceito. Sem ele, a configuração inicial é feita automaticamente. Os marcadores distribuídos pelo editor são sugestões de navegação, não reconhecimento musical; a exportação final só é liberada após confirmação humana.
 
@@ -106,4 +114,4 @@ python coral_editor.py --source "D:\Caminho\Do Concerto" --archive-root "D:\Proj
 - o editor bloqueia projetos sem música, com marcadores fora de ordem ou recorte inválido;
 - um alerta de duração não apaga o vídeo: ele registra a divergência para conferência.
 
-Consulte [Especificação da versão 2](docs/ESPECIFICACAO_V2.md), [Arquitetura](docs/ARQUITETURA.md), [Procedimento por concerto](docs/PROCEDIMENTO_CONCERTO.md) e [Requisitos operacionais](docs/REQUISITOS_OPERACIONAIS.md).
+Consulte [Especificação da versão 2](docs/ESPECIFICACAO_V2.md), [Arquitetura](docs/ARQUITETURA.md), [Procedimento por concerto](docs/PROCEDIMENTO_CONCERTO.md), [Requisitos operacionais](docs/REQUISITOS_OPERACIONAIS.md) e [Histórico de versões](docs/CHANGELOG.md).

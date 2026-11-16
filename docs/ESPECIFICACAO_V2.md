@@ -55,6 +55,8 @@ O PDF do programa não é interpretado diretamente. O editor lê listas numerada
 
 - usar apenas o áudio do Tascam;
 - aplicar correção linear de relógio e ganho global;
+- oferecer tratamento equilibrado com compressor moderado e normalização EBU R128 em −16 LUFS, LRA 9 e pico verdadeiro máximo de −1,5 dBTP;
+- manter um modo natural sem compressão ou normalização de loudness;
 - aplicar recorte somente na renderização final;
 - medir a duração do MP4 final com FFprobe;
 - comparar duração real e prevista com tolerância configurável;
@@ -92,11 +94,14 @@ O PDF do programa não é interpretado diretamente. O editor lê listas numerada
 9. FFmpeg e FFprobe não abrem janelas nem recebem teclas do usuário no Windows.
 10. Sem `projeto_inicial.json`, um concerto de dez minutos ou mais gera uma prévia próxima da duração real, e não a prévia de 80 segundos do modelo antigo.
 11. Um repertório Markdown é carregado na ordem e suas marcações ficam pendentes até confirmação.
+12. Alterar o deslocamento não pode produzir tempos negativos no FFmpeg nem remover uma prévia válida.
+13. No modo equilibrado, a saída deve se aproximar de −16 LUFS sem ultrapassar o limite configurado de pico verdadeiro.
 
 ## Limitações conhecidas
 
 - o deslocamento inicial é estimado automaticamente, mas precisa ser conferido; a deriva não é estimada;
 - PDF não é lido automaticamente;
 - não há reconhecimento automático dos inícios das músicas;
+- música e aplausos não são classificados automaticamente; o equilíbrio é obtido por processamento dinâmico global para evitar falsos cortes em crescendos;
 - saltos não lineares entre câmera e gravador exigem tratamento manual;
 - a validação de duração não substitui a conferência audiovisual do arquivo final.

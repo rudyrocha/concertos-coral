@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from coral_editor import (  # noqa: E402
+    CoralApplication,
     SCHEMA,
     _best_lag,
     add_nostdin,
@@ -141,6 +142,42 @@ class ProjectRulesTest(unittest.TestCase):
         lag, score = _best_lag(camera, tascam, -5, 5, 5)
         self.assertEqual(lag, 3)
         self.assertGreater(score, 0.99)
+
+    def test_offset_clips_to_real_media_instead_of_negative_trim(self):
+        project = sample_project()
+        project["tracks"][0]["start_tascam"] = 10.0
+        project["tracks"][1]["start_tascam"] = 50.0
+        project["last_end_tascam"] = 70.0
+        project["sync"]["offset_seconds"] = 6.0
+        project["sync"]["clock_ratio"] = 1.0
+        project["camera_duration_seconds"] = 80.0
+        project["audio_duration_seconds"] = 90.0
+        times = source_times(project)
+        self.assertEqual(times["camera_start"], 0.0)
+        self.assertEqual(times["audio_start"], 6.0)
+        self.assertTrue(times["trim_clipped_start"])
+        self.assertAlmostEqual(final_time(project, 10.0), 4.0)
+
+    def test_incompatible_offset_is_reported_without_invalid_trim(self):
+        project = sample_project()
+        project["tracks"][0]["start_tascam"] = 1.0
+        project["tracks"][1]["start_tascam"] = 4.0
+        project["last_end_tascam"] = 7.0
+        project["sync"]["offset_seconds"] = 6.0
+        project["sync"]["clock_ratio"] = 1.0
+        project["camera_duration_seconds"] = 8.0
+        project["audio_duration_seconds"] = 10.0
+        times = source_times(project)
+        self.assertEqual(times["camera_start"], 0.0)
+        self.assertTrue(times["markers_outside_overlap"])
+
+    def test_balanced_audio_uses_compression_and_loudness_normalization(self):
+        project = sample_project()
+        project["audio_processing"] = {"mode": "balanced"}
+        app = CoralApplication.__new__(CoralApplication)
+        graph = app.filter_graph(project, final=False)
+        self.assertIn("acompressor=", graph)
+        self.assertIn("loudnorm=I=-16.0:LRA=9.0:TP=-1.5", graph)
 
 
 if __name__ == "__main__":

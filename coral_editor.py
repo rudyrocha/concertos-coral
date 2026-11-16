@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -170,12 +170,36 @@ def source_times(project: dict[str, Any]) -> dict[str, float]:
     video_pts_offset = float(project["sync"].get("video_pts_offset", 0.0))
     before, after = trim_values(project)
 
-    first_camera = (first - offset) / ratio
-    last_camera = (last_end - offset) / ratio
-    camera_start = first_camera - before
-    camera_end = last_camera + after
-    audio_start = first - before * ratio
-    audio_end = last_end + after * ratio
+    requested_audio_start = first - before * ratio
+    requested_audio_end = last_end + after * ratio
+    requested_camera_start = (requested_audio_start - offset) / ratio
+    requested_camera_end = (requested_audio_end - offset) / ratio
+
+    # Usa somente a interseção realmente existente entre câmera e Tascam.
+    # Isso é especialmente importante quando o deslocamento é alterado: um
+    # início negativo enviado ao filtro trim pode gerar uma prévia vazia.
+    camera_floor = max(0.0, -offset / ratio)
+    camera_ceiling = float("inf")
+    camera_duration = project.get("camera_duration_seconds")
+    audio_duration = project.get("audio_duration_seconds")
+    if camera_duration is not None:
+        camera_ceiling = min(camera_ceiling, float(camera_duration))
+    if audio_duration is not None:
+        camera_ceiling = min(camera_ceiling, (float(audio_duration) - offset) / ratio)
+    camera_start = max(requested_camera_start, camera_floor)
+    camera_end = min(requested_camera_end, camera_ceiling)
+    if not math.isfinite(camera_end):
+        camera_end = requested_camera_end
+    if camera_end <= camera_start:
+        raise ValueError(
+            "O deslocamento informado não deixa um trecho comum entre vídeo e áudio. "
+            "Revise o sinal e o valor do sincronismo."
+        )
+    audio_start = offset + ratio * camera_start
+    audio_end = offset + ratio * camera_end
+    markers_outside_overlap = first < audio_start - 0.001 or last_end > audio_end + 0.001
+    clipped_start = camera_start > requested_camera_start + 0.001
+    clipped_end = camera_end < requested_camera_end - 0.001
     return {
         "camera_start": camera_start,
         "camera_end": camera_end,
@@ -184,17 +208,18 @@ def source_times(project: dict[str, Any]) -> dict[str, float]:
         "audio_start": audio_start,
         "audio_end": audio_end,
         "duration": camera_end - camera_start,
+        "effective_before": max(0.0, (first - audio_start) / ratio),
+        "effective_after": max(0.0, (audio_end - last_end) / ratio),
+        "trim_clipped": clipped_start or clipped_end,
+        "trim_clipped_start": clipped_start,
+        "trim_clipped_end": clipped_end,
+        "markers_outside_overlap": markers_outside_overlap,
     }
 
 
 def final_time(project: dict[str, Any], absolute_tascam: float) -> float:
-    tracks = enabled_tracks(project)
-    if not tracks:
-        raise ValueError("O projeto não possui músicas habilitadas.")
-    first = float(tracks[0]["start_tascam"])
     ratio = float(project["sync"]["clock_ratio"])
-    before, _ = trim_values(project)
-    return before + (float(absolute_tascam) - first) / ratio
+    return (float(absolute_tascam) - source_times(project)["audio_start"]) / ratio
 
 
 def migrate_project(project: dict[str, Any]) -> dict[str, Any]:
@@ -224,6 +249,15 @@ def migrate_project(project: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("overlay_duration_seconds", 7.0)
     migrated.setdefault("overlay_enabled", True)
     migrated.setdefault("audio_gain_db", 0.0)
+    migrated.setdefault(
+        "audio_processing",
+        {
+            "mode": "balanced",
+            "target_lufs": -16.0,
+            "loudness_range": 9.0,
+            "true_peak_db": -1.5,
+        },
+    )
     migrated.setdefault("sync", {"offset_seconds": 0.0, "clock_ratio": 1.0, "video_pts_offset": 0.0})
     migrated.setdefault("crop", {"width": 1920, "height": 1080, "x": 0, "y": 0})
     for position, track in enumerate(migrated.get("tracks", []), start=1):
@@ -269,6 +303,9 @@ def validate_project(project: dict[str, Any]) -> None:
     ratio = float(project.get("sync", {}).get("clock_ratio", 0.0))
     if not 0.95 <= ratio <= 1.05:
         raise ValueError("A correção de relógio está fora do intervalo seguro.")
+    audio_mode = str(project.get("audio_processing", {}).get("mode", "balanced"))
+    if audio_mode not in {"natural", "balanced"}:
+        raise ValueError("Modo de tratamento de áudio inválido.")
 
     source = project.get("source_video", {})
     source_width = int(source.get("width", 0))
@@ -635,6 +672,12 @@ def bootstrap_project(
     project["audio_duration_seconds"] = round(audio_duration, 3)
     project["repertoire_source"] = repertoire_path.name if repertoire_path else None
     project["audio_gain_db"] = None
+    project["audio_processing"] = {
+        "mode": "balanced",
+        "target_lufs": -16.0,
+        "loudness_range": 9.0,
+        "true_peak_db": -1.5,
+    }
     project["output_file"] = f"{slugify(source.name)}.mp4"
     source_note = (
         f"Repertório importado de {repertoire_path.name}. " if repertoire_path else
@@ -900,6 +943,8 @@ class CoralApplication:
             float(current.get("trim", {}).get("after_seconds", 10.0)),
             float(current.get("last_end_tascam", 0.0)),
             float(old_enabled[0]["start_tascam"]) if old_enabled else None,
+            float(current.get("audio_gain_db", 0.0)),
+            str(current.get("audio_processing", {}).get("mode", "balanced")),
         )
         current["tracks"] = tracks
         current["event"] = str(payload.get("event", current.get("event", "Concerto"))).strip()
@@ -914,6 +959,8 @@ class CoralApplication:
         current["last_end_confirmed"] = bool(payload.get("last_end_confirmed", False))
         current["overlay_enabled"] = bool(payload.get("overlay_enabled", True))
         current["audio_gain_db"] = float(payload.get("audio_gain_db", 0.0))
+        audio_mode = str(payload.get("audio_processing_mode", "balanced"))
+        current.setdefault("audio_processing", {})["mode"] = audio_mode
         current["trim"] = {
             "before_seconds": float(payload.get("trim_before_seconds", 10.0)),
             "after_seconds": float(payload.get("trim_after_seconds", 10.0)),
@@ -937,6 +984,8 @@ class CoralApplication:
             float(current["trim"]["after_seconds"]),
             float(current["last_end_tascam"]),
             float(enabled_tracks(current)[0]["start_tascam"]),
+            float(current.get("audio_gain_db", 0.0)),
+            str(current.get("audio_processing", {}).get("mode", "balanced")),
         )
         if new_timing != previous_timing:
             current["preview_needs_regeneration"] = True
@@ -974,10 +1023,24 @@ class CoralApplication:
         audio_filters = [
             f"atrim=start={timing['audio_start']:.6f}:end={timing['audio_end']:.6f}",
             "asetpts=PTS-STARTPTS",
-            "aresample=48000",
             f"atempo={ratio:.12f}",
             f"volume={gain:.2f}dB",
         ]
+        audio_processing = project.get("audio_processing", {})
+        if audio_processing.get("mode", "balanced") == "balanced":
+            target = float(audio_processing.get("target_lufs", -16.0))
+            loudness_range = float(audio_processing.get("loudness_range", 9.0))
+            true_peak = float(audio_processing.get("true_peak_db", -1.5))
+            audio_filters.extend(
+                [
+                    # Compressão moderada reduz aplausos muito acima do coro.
+                    "acompressor=threshold=0.125:ratio=3:attack=20:release=500:"
+                    "makeup=1:knee=4:link=maximum:detection=rms",
+                    # EBU R128 eleva a percepção das músicas e limita picos.
+                    f"loudnorm=I={target:.1f}:LRA={loudness_range:.1f}:TP={true_peak:.1f}",
+                ]
+            )
+        audio_filters.append("aresample=48000")
         return f"[0:v]{','.join(video_filters)}[v];[1:a]{','.join(audio_filters)}[a]"
 
     def ffmpeg_command(self, project: dict[str, Any], final: bool, output: Path) -> list[str]:
@@ -1113,8 +1176,13 @@ class CoralApplication:
                 raise RuntimeError(
                     f"Confirme os {pending} marcadores pendentes antes da exportação final."
                 )
-            self.write_outputs()
             timing = source_times(project)
+            if timing.get("markers_outside_overlap"):
+                raise RuntimeError(
+                    "O sincronismo informado coloca parte da apresentação fora do trecho comum "
+                    "entre vídeo e áudio. Revise o deslocamento; a prévia anterior foi preservada."
+                )
+            self.write_outputs()
             output = self.final_dir / project["output_file"] if final else self.preview_path
             temporary = output.with_name(output.stem + ".parcial" + output.suffix)
             command = self.ffmpeg_command(project, final, temporary)
@@ -1310,7 +1378,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
 
-def wait_for_render(app: CoralApplication) -> None:
+def wait_for_render(app: CoralApplication, fatal: bool = True) -> bool:
     while app.state.snapshot()["running"]:
         state = app.state.snapshot()
         print(f"\r{state['message']:<70}", end="", flush=True)
@@ -1318,12 +1386,16 @@ def wait_for_render(app: CoralApplication) -> None:
     state = app.state.snapshot()
     print("\r" + " " * 80 + "\r", end="")
     if state.get("error"):
-        fail(str(state["error"]))
+        if fatal:
+            fail(str(state["error"]))
+        print(f"A nova prévia falhou; a anterior foi preservada: {state['error']}")
+        return False
     print(state["message"])
     if state.get("output"):
         print(f"Saída: {state['output']}")
     if state.get("archive"):
         print(f"Arquivo do projeto: {state['archive']}")
+    return True
 
 
 def running_instance(port: int) -> dict[str, Any] | None:
@@ -1376,10 +1448,11 @@ def main() -> None:
         app.start_render(final=True)
         wait_for_render(app)
         return
-    if not app.preview_path.exists() or app.project.get("preview_needs_regeneration", False):
+    had_preview = app.preview_path.exists()
+    if not had_preview or app.project.get("preview_needs_regeneration", False):
         print("A prévia ainda não existe. A geração pode levar vários minutos.")
         app.start_render(final=False)
-        wait_for_render(app)
+        wait_for_render(app, fatal=args.prepare_only or not had_preview)
     if args.prepare_only:
         print(f"Prévia: {app.preview_path}")
         return

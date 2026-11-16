@@ -34,6 +34,7 @@ Isso evita janelas intermitentes e impede que teclas digitadas pelo usuário sej
 - Arquivos MTS/M2TS e WAV originais são somente lidos.
 - Saídas são produzidas primeiro com sufixo `.parcial` e publicadas apenas após sucesso.
 - Falha de renderização mantém projeto, log, prévia anterior e originais.
+- Uma regeneração com sincronismo incompatível não encerra o editor quando existe uma prévia anterior válida.
 - O ZIP externo de projeto não contém mídia e não substitui um pacote anterior com o mesmo nome.
 - A validação de duração gera alerta, mas não exclui automaticamente o MP4.
 

@@ -1,6 +1,6 @@
 Option Explicit
 
-Dim fso, shell, shellApp, base, pythonw, script, installer, source, folder, cmd, rc
+Dim fso, shell, shellApp, base, pythonw, script, installer, source, folder, cmd, rc, startFolder
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
 Set shellApp = CreateObject("Shell.Application")
@@ -30,7 +30,12 @@ End If
 If WScript.Arguments.Count > 0 Then
   source = WScript.Arguments(0)
 Else
-  Set folder = shellApp.BrowseForFolder(0, "Selecione a pasta do concerto", 0, 17)
+  startFolder = "D:\OFFline\Videos"
+  If fso.FolderExists(startFolder) Then
+    Set folder = shellApp.BrowseForFolder(0, "Selecione a pasta do concerto", 0, startFolder)
+  Else
+    Set folder = shellApp.BrowseForFolder(0, "Selecione a pasta do concerto", 0, 17)
+  End If
   If folder Is Nothing Then WScript.Quit 0
   On Error Resume Next
   source = folder.Self.Path

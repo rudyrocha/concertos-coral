@@ -9,6 +9,8 @@ Este documento registra os requisitos do projeto `editor-ensaio` que também se 
 3. Se o ambiente `.venv` ainda não existir, o instalador é executado de forma visível para que erros não fiquem ocultos.
 4. O atalho usa `assets/Editor_Concertos.ico`, derivado do logo oficial fornecido do Clube Paineiras do Morumby.
 5. Ao abrir pelo atalho, o usuário escolhe a pasta do concerto em uma janela do Windows.
+6. O seletor usa `D:\OFFline\Videos` como pasta inicial quando ela existe; caso contrário, apresenta a raiz de unidades.
+7. Uma falha inesperada de inicialização exibe mensagem e grava `editor_erro.log` na pasta do aplicativo.
 
 ## FFmpeg e FFprobe sem janelas
 

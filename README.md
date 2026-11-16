@@ -4,8 +4,11 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2.3
+## Principais recursos da versão 2.3.1
 
+- abertura garantida mesmo quando o projeto salvo contém sincronismo incompatível;
+- seletor de pasta iniciado em `D:\OFFline\Videos`, quando disponível;
+- mensagem visível e `editor_erro.log` para falhas inesperadas de inicialização;
 - tratamento de volume equilibrado com compressão moderada e normalização EBU R128 em −16 LUFS;
 - opção de preservar o áudio natural usando somente o ganho global;
 - proteção contra prévia vazia ao alterar o deslocamento de sincronismo;
@@ -34,6 +37,8 @@ O modo **Equilibrado** reduz a diferença excessiva entre músicas e aplausos se
 2. Execute `instalar.bat`.
 3. O instalador valida Python e FFmpeg, cria um ambiente isolado e instala na Área de Trabalho o atalho **Editor de Concertos**.
 4. Ao abrir o atalho, selecione a pasta do concerto.
+
+No computador de edição, o seletor começa em `D:\OFFline\Videos`. Se essa pasta não existir, começa na raiz de unidades do Windows.
 
 O atalho usa o logo do Clube Paineiras e inicia o aplicativo sem janela de terminal permanente. FFmpeg e FFprobe também são executados sem janelas e sem acesso ao teclado.
 

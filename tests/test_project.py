@@ -179,6 +179,21 @@ class ProjectRulesTest(unittest.TestCase):
         self.assertIn("acompressor=", graph)
         self.assertIn("loudnorm=I=-16.0:LRA=9.0:TP=-1.5", graph)
 
+    def test_previous_preview_supplies_fallback_for_invalid_sync(self):
+        project = sample_project()
+        project["preview"] = {"audio_start_tascam": 12.0, "audio_end_tascam": 72.0}
+        timing = CoralApplication.preview_fallback_timing(project)
+        self.assertEqual(timing["audio_start"], 12.0)
+        self.assertEqual(timing["audio_end"], 72.0)
+        self.assertTrue(timing["using_previous_preview"])
+
+    def test_windows_launcher_prefers_offline_videos_folder(self):
+        launcher = (Path(__file__).resolve().parents[1] / "Editor de Concertos.vbs").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(r'D:\OFFline\Videos', launcher)
+        self.assertIn("FolderExists(startFolder)", launcher)
+
 
 if __name__ == "__main__":
     unittest.main()

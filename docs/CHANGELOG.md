@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 2.3.1
+
+- permite abrir e corrigir projetos que tenham sincronismo incompatível salvo;
+- impede encerramento silencioso antes da abertura do navegador;
+- mostra falhas inesperadas e grava `editor_erro.log`;
+- inicia o seletor em `D:\OFFline\Videos` quando a pasta existe.
+
 ## 2.3.0
 
 - corrige prévia vazia após alteração do deslocamento de sincronismo;

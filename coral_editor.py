@@ -20,6 +20,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.parse
 import urllib.request
 import uuid
@@ -31,7 +32,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -873,11 +874,15 @@ class CoralApplication:
         validate_project(self.project)
         if self.project.get("audio_gain_db") is None:
             print("Analisando o nível do áudio do Tascam...")
-            self.project["audio_gain_db"] = detect_peak_gain(
-                self.ffmpeg, self.audio_path, self.project, self.log_path
-            )
+            try:
+                self.project["audio_gain_db"] = detect_peak_gain(
+                    self.ffmpeg, self.audio_path, self.project, self.log_path
+                )
+            except ValueError as exc:
+                self.project["audio_gain_db"] = 0.0
+                self.project["timing_error"] = str(exc)
+        self.refresh_outputs()
         atomic_write_json(self.project_path, self.project)
-        self.write_outputs()
 
     def reload_project(self) -> dict[str, Any]:
         self.project = migrate_project(load_json(self.project_path))
@@ -888,9 +893,65 @@ class CoralApplication:
         write_chapters(self.project, self.chapters_path)
         write_ass(self.project, self.ass_path)
 
+    def refresh_outputs(self) -> bool:
+        """Atualiza derivados quando o sincronismo é válido, sem impedir a abertura."""
+        try:
+            timing = source_times(self.project)
+            if timing.get("markers_outside_overlap"):
+                raise ValueError(
+                    "O sincronismo informado coloca parte da apresentação fora do trecho comum "
+                    "entre vídeo e áudio. Revise o deslocamento."
+                )
+            self.write_outputs()
+        except ValueError as exc:
+            self.project["timing_error"] = str(exc)
+            return False
+        self.project.pop("timing_error", None)
+        return True
+
+    @staticmethod
+    def preview_fallback_timing(project: dict[str, Any]) -> dict[str, Any]:
+        """Descreve a prévia anterior quando o novo sincronismo não é calculável."""
+        preview = project.get("preview", {})
+        ratio = max(0.000001, float(project.get("sync", {}).get("clock_ratio", 1.0)))
+        tracks = enabled_tracks(project)
+        first = float(tracks[0]["start_tascam"]) if tracks else 0.0
+        last_end = float(project.get("last_end_tascam", first + 1.0))
+        audio_start = float(preview.get("audio_start_tascam", max(0.0, first)))
+        audio_end = float(preview.get("audio_end_tascam", max(audio_start + 0.001, last_end)))
+        if audio_end <= audio_start:
+            audio_end = audio_start + 0.001
+        duration = (audio_end - audio_start) / ratio
+        return {
+            "camera_start": 0.0,
+            "camera_end": duration,
+            "video_filter_start": 0.0,
+            "video_filter_end": duration,
+            "audio_start": audio_start,
+            "audio_end": audio_end,
+            "duration": duration,
+            "effective_before": max(0.0, (first - audio_start) / ratio),
+            "effective_after": max(0.0, (audio_end - last_end) / ratio),
+            "trim_clipped": True,
+            "trim_clipped_start": True,
+            "trim_clipped_end": True,
+            "markers_outside_overlap": True,
+            "using_previous_preview": True,
+        }
+
     def public_project(self) -> dict[str, Any]:
         project = json.loads(json.dumps(self.project))
-        timing = source_times(project)
+        timing_error = project.get("timing_error")
+        try:
+            timing = source_times(project)
+            if timing.get("markers_outside_overlap"):
+                timing_error = (
+                    "O sincronismo informado coloca parte da apresentação fora do trecho comum "
+                    "entre vídeo e áudio. Revise o deslocamento."
+                )
+        except ValueError as exc:
+            timing_error = str(exc)
+            timing = self.preview_fallback_timing(project)
         preview = project.setdefault("preview", {})
         preview.setdefault("audio_start_tascam", timing["audio_start"])
         preview.setdefault("audio_end_tascam", timing["audio_end"])
@@ -898,10 +959,14 @@ class CoralApplication:
             **timing,
             "duration_clock": seconds_to_clock(timing["duration"]),
             "final_times": {
-                str(track["id"]): final_time(project, float(track["start_tascam"]))
+                str(track["id"]):
+                (float(track["start_tascam"]) - timing["audio_start"])
+                / float(project["sync"]["clock_ratio"])
                 for track in enabled_tracks(project)
             },
-            "last_end_final": final_time(project, float(project["last_end_tascam"])),
+            "last_end_final":
+            (float(project["last_end_tascam"]) - timing["audio_start"])
+            / float(project["sync"]["clock_ratio"]),
             "chapters_file": str(self.chapters_path),
             "final_folder": str(self.final_dir),
             "archive_folder": str(self.archive_root),
@@ -909,6 +974,7 @@ class CoralApplication:
             "pending_markers": sum(
                 1 for track in enabled_tracks(project) if not track.get("confirmed", False)
             ) + (0 if project.get("last_end_confirmed", False) else 1),
+            "timing_error": timing_error,
         }
         return project
 
@@ -991,8 +1057,8 @@ class CoralApplication:
             current["preview_needs_regeneration"] = True
         validate_project(current)
         self.project = current
+        self.refresh_outputs()
         atomic_write_json(self.project_path, current)
-        self.write_outputs()
 
     def filter_graph(self, project: dict[str, Any], final: bool) -> str:
         timing = source_times(project)
@@ -1478,4 +1544,27 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - último recurso para o lançador sem console
+        detail = traceback.format_exc()
+        try:
+            error_log = Path(__file__).resolve().parent / "editor_erro.log"
+            error_log.write_text(
+                f"{dt.datetime.now().isoformat()}\n{detail}", encoding="utf-8"
+            )
+        except Exception:
+            error_log = None
+        message = f"O Editor de Concertos não pôde iniciar.\n\n{exc}"
+        if error_log:
+            message += f"\n\nDiagnóstico salvo em:\n{error_log}"
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.user32.MessageBoxW(0, message, "Editor de Concertos", 0x10)
+            except Exception:
+                pass
+        else:
+            print(detail, file=sys.stderr)
+        raise SystemExit(1)

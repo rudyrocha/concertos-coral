@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+_CoralEditor/
+_CoralEditor_Arquivos/
+*.MTS
+*.M2TS
+*.WAV
+*.mp4
+*.parcial.*
+dist/

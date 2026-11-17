@@ -135,6 +135,37 @@ class ProjectRulesTest(unittest.TestCase):
         self.assertEqual(tracks[0]["credits"], "Ary Barroso")
         self.assertEqual(tracks[1]["credits"], "Adoniran Barbosa")
 
+    def test_multiline_numbered_program_keeps_credits_with_their_music(self):
+        text = (
+            "Programa do concerto\n\n1\\)\n**Cuitelinho&#xA0;**\n"
+            "Tema tradicional de Mato Grosso\nContribuições de intérpretes\n\n"
+            "2) Haikais de Primavera | Yara Campos\n\n3)\n"
+            "**Estão voltando as flores**\nPaulo Soledade"
+        )
+        self.assertEqual(parse_repertoire_text(text), [
+            {"title": "Cuitelinho", "credits": "Tema tradicional de Mato Grosso Contribuições de intérpretes"},
+            {"title": "Haikais de Primavera", "credits": "Yara Campos"},
+            {"title": "Estão voltando as flores", "credits": "Paulo Soledade"},
+        ])
+
+    def test_sync_sample_uses_camera_time_and_unsaved_settings(self):
+        app = CoralApplication.__new__(CoralApplication)
+        app.work_dir = Path("unused")
+        app.project = sample_project()
+        app.project.update(camera_duration_seconds=300, audio_duration_seconds=310)
+        saved = dict(app.project["sync"])
+        output, project, timing = app.sync_sample(
+            {"slot": "B", "camera_start": 250, "offset": 6.7, "ratio": 1.001}
+        )
+        self.assertEqual(output.name, "sync-B.mp4")
+        self.assertAlmostEqual(timing["audio_start"], 256.95)
+        self.assertAlmostEqual(timing["audio_end"], 266.96)
+        self.assertEqual(timing["duration"], 10)
+        self.assertEqual(project["sync"]["offset_seconds"], 6.7)
+        self.assertEqual(app.project["sync"], saved)
+        with self.assertRaisesRegex(ValueError, "área comum"):
+            app.sync_sample({"slot": "A", "camera_start": 295, "offset": 6.7, "ratio": 1})
+
     def test_placeholder_from_version_21_is_detected(self):
         project = migrate_project(
             {

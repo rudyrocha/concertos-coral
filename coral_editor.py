@@ -8,6 +8,7 @@ origem nunca são alterados. A interface é servida apenas em 127.0.0.1.
 from __future__ import annotations
 
 import argparse
+import html
 import array
 import ctypes
 import datetime as dt
@@ -18,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -33,7 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.3.5"
+VERSION = "2.4.0"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -395,6 +397,20 @@ def _split_repertoire_entry(value: str) -> tuple[str, str]:
 
 def parse_repertoire_text(text: str) -> list[dict[str, str]]:
     """Extrai uma lista ordenada simples de um Markdown ou TXT."""
+    text = html.unescape(text)
+    numbered = list(re.finditer(r"(?m)^[ \t]*\d+\\?[.)](?=[ \t]|\r?$)[ \t]*", text))
+    if numbered:
+        tracks = []
+        for index, marker in enumerate(numbered):
+            end = numbered[index + 1].start() if index + 1 < len(numbered) else len(text)
+            lines = [line.strip() for line in text[marker.end():end].splitlines() if line.strip()]
+            if not lines:
+                raise ValueError("Há uma música numerada sem título.")
+            title, credits = _split_repertoire_entry(lines[0])
+            if not title:
+                raise ValueError("Há uma música numerada sem título.")
+            tracks.append({"title": title, "credits": " ".join(filter(None, [credits, *map(_clean_markdown, lines[1:])]))})
+        return tracks
     list_entries: list[str] = []
     table_entries: list[str] = []
     heading_entries: list[str] = []
@@ -454,11 +470,42 @@ def discover_repertoire(source: Path) -> tuple[Path | None, list[dict[str, str]]
     for path in candidates:
         try:
             tracks = parse_repertoire_text(path.read_text(encoding="utf-8-sig"))
-        except (OSError, UnicodeError):
+        except (OSError, ValueError):
             continue
         if tracks:
             return path, tracks
     return None, []
+
+
+def read_program_photo(image: bytes, script_dir: Path) -> str:
+    if not image.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")):
+        raise ValueError("Escolha uma foto em JPG ou PNG.")
+    executable = shutil.which("tesseract")
+    if not executable:
+        candidates = [script_dir / "tesseract.exe"]
+        if os.name == "nt":
+            for key in ("ProgramFiles", "ProgramFiles(x86)"):
+                if os.environ.get(key):
+                    candidates.append(Path(os.environ[key]) / "Tesseract-OCR" / "tesseract.exe")
+        executable = next((str(path) for path in candidates if path.is_file()), None)
+    if not executable:
+        raise ValueError("Instale o Tesseract OCR com o idioma português (por) para ler fotos.")
+    with tempfile.TemporaryDirectory() as folder:
+        photo = Path(folder) / ("programa.png" if image.startswith(b"\x89PNG") else "programa.jpg")
+        photo.write_bytes(image)
+        try:
+            result = subprocess.run(
+                [executable, str(photo), "stdout", "-l", "por", "--psm", "3"],
+                capture_output=True, timeout=60, **hidden_process_kwargs(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("A leitura da foto demorou demais. Tente uma imagem menor.") from exc
+    if result.returncode:
+        raise ValueError("Falha na leitura da foto. Verifique se o idioma português (por) está instalado no Tesseract.")
+    text = result.stdout.decode("utf-8", errors="replace").strip()
+    if not text:
+        raise ValueError("Nenhum texto foi encontrado. Tente uma foto mais nítida.")
+    return text
 
 
 def is_placeholder_project(project: dict[str, Any]) -> bool:
@@ -1127,8 +1174,9 @@ class CoralApplication:
         self.refresh_outputs()
         atomic_write_json(self.project_path, current)
 
-    def filter_graph(self, project: dict[str, Any], final: bool) -> str:
-        timing = source_times(project)
+    def filter_graph(self, project: dict[str, Any], final: bool, timing=None) -> str:
+        if timing is None:
+            timing = source_times(project)
         ratio = float(project["sync"]["clock_ratio"])
         gain = float(project.get("audio_gain_db", 0.0))
         interlaced = bool(project.get("source_video", {}).get("interlaced", True))
@@ -1176,7 +1224,7 @@ class CoralApplication:
         audio_filters.append("aresample=48000")
         return f"[0:v]{','.join(video_filters)}[v];[1:a]{','.join(audio_filters)}[a]"
 
-    def ffmpeg_command(self, project: dict[str, Any], final: bool, output: Path) -> list[str]:
+    def ffmpeg_command(self, project: dict[str, Any], final: bool, output: Path, timing=None) -> list[str]:
         export = project.get("export", {})
         command = add_nostdin([
             self.ffmpeg,
@@ -1187,7 +1235,7 @@ class CoralApplication:
             "-i",
             str(self.audio_path),
             "-filter_complex",
-            self.filter_graph(project, final),
+            self.filter_graph(project, final, timing),
             "-map",
             "[v]",
             "-map",
@@ -1288,8 +1336,31 @@ class CoralApplication:
                     archive.write(candidate, arcname=candidate.name)
         return archive_path
 
-    def run_render(self, final: bool) -> None:
-        kind = "final" if final else "prévia"
+    def sync_sample(self, payload: dict[str, Any]) -> tuple[Path, dict, dict]:
+        slot = payload["slot"]
+        if slot not in ("A", "B"):
+            raise ValueError("Escolha o ponto A ou B.")
+        start = float(payload["camera_start"])
+        offset = float(payload["offset"])
+        ratio = float(payload["ratio"])
+        if not math.isfinite(start) or not math.isfinite(offset) or not 0.95 <= ratio <= 1.05:
+            raise ValueError("Confira o início do trecho e os parâmetros de sincronismo.")
+        project = json.loads(json.dumps(self.project))
+        end = start + 10
+        audio_start, audio_end = offset + ratio * start, offset + ratio * end
+        if (start < 0 or end > float(project["camera_duration_seconds"])
+                or audio_start < 0 or audio_end > float(project["audio_duration_seconds"])):
+            raise ValueError("Escolha 10 segundos inteiros dentro da área comum da câmera e do Tascam.")
+        project["sync"].update(offset_seconds=offset, clock_ratio=ratio)
+        pts_offset = float(project["sync"].get("video_pts_offset", 0))
+        timing = {
+            "video_filter_start": start - pts_offset, "video_filter_end": end - pts_offset,
+            "audio_start": audio_start, "audio_end": audio_end, "duration": 10.0,
+        }
+        return self.work_dir / f"sync-{slot}.mp4", project, timing
+
+    def run_render(self, final: bool, sample=None) -> None:
+        kind = "teste de sincronismo" if sample else "final" if final else "prévia"
         self.state.update(
             running=True,
             kind=kind,
@@ -1301,7 +1372,7 @@ class CoralApplication:
             error=None,
         )
         try:
-            project = self.reload_project()
+            project = sample[1] if sample else self.reload_project()
             if final and not project.get("setup_complete", False):
                 pending = sum(
                     1 for track in enabled_tracks(project) if not track.get("confirmed", False)
@@ -1309,16 +1380,17 @@ class CoralApplication:
                 raise RuntimeError(
                     f"Confirme os {pending} marcadores pendentes antes da exportação final."
                 )
-            timing = source_times(project)
+            timing = sample[2] if sample else source_times(project)
             if timing.get("markers_outside_overlap"):
                 raise RuntimeError(
                     "O sincronismo informado coloca parte da apresentação fora do trecho comum "
                     "entre vídeo e áudio. Revise o deslocamento; a prévia anterior foi preservada."
                 )
-            self.write_outputs()
-            output = self.final_dir / project["output_file"] if final else self.preview_path
+            if not sample:
+                self.write_outputs()
+            output = sample[0] if sample else (self.final_dir / project["output_file"] if final else self.preview_path)
             temporary = output.with_name(output.stem + ".parcial" + output.suffix)
-            command = self.ffmpeg_command(project, final, temporary)
+            command = self.ffmpeg_command(project, final, temporary, timing)
             with self.log_path.open("a", encoding="utf-8") as log_handle:
                 log_handle.write(f"\n[Renderização {kind}]\n")
                 log_handle.write(subprocess.list2cmdline(command) + "\n")
@@ -1369,10 +1441,12 @@ class CoralApplication:
             if final:
                 verification = self.verify_export(project, output)
                 archive = self.create_archive(project)
-            else:
+            elif not sample:
                 project["preview"] = {
                     "audio_start_tascam": timing["audio_start"],
                     "audio_end_tascam": timing["audio_end"],
+                    "camera_start": timing["camera_start"],
+                    "clock_ratio": project["sync"]["clock_ratio"],
                     "uncropped": True,
                 }
                 project["preview_needs_regeneration"] = False
@@ -1392,10 +1466,13 @@ class CoralApplication:
         except Exception as exc:  # noqa: BLE001 - registro operacional
             self.state.update(running=False, message=f"Falha ao gerar {kind}.", error=str(exc))
 
-    def start_render(self, final: bool) -> None:
-        if self.state.snapshot()["running"]:
-            raise RuntimeError("Já existe uma renderização em andamento.")
-        threading.Thread(target=self.run_render, args=(final,), daemon=True).start()
+    def start_render(self, final: bool, sample=None) -> None:
+        with self.state.lock:
+            if self.state.data["running"]:
+                raise RuntimeError("Já existe uma renderização em andamento.")
+            kind = "teste de sincronismo" if sample else "final" if final else "prévia"
+            self.state.data.update(running=True, kind=kind, progress=0, error=None)
+        threading.Thread(target=self.run_render, args=(final, sample), daemon=True).start()
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -1496,6 +1573,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_json(self.app.state.snapshot())
         elif parsed.path == "/media/preview.mp4":
             self.serve_file_with_range(self.app.preview_path, "video/mp4")
+        elif parsed.path in ("/media/sync-A.mp4", "/media/sync-B.mp4"):
+            self.serve_file_with_range(self.app.work_dir / Path(parsed.path).name, "video/mp4")
         elif parsed.path == "/api/chapters":
             self.send_text(self.app.chapters_path.read_text(encoding="utf-8"), "text/plain; charset=utf-8")
         else:
@@ -1504,6 +1583,11 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            if self.path == "/api/program-photo":
+                if not 0 < length <= 12 * 1024 * 1024:
+                    raise ValueError("Escolha uma foto de até 12 MB.")
+                self.send_json({"text": read_program_photo(self.rfile.read(length), self.app.script_dir)})
+                return
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             if self.path == "/api/save":
                 self.app.save_from_browser(payload)
@@ -1514,6 +1598,14 @@ class RequestHandler(BaseHTTPRequestHandler):
             elif self.path == "/api/render-preview":
                 self.app.start_render(final=False)
                 self.send_json({"ok": True}, HTTPStatus.ACCEPTED)
+            elif self.path == "/api/sync-sample":
+                self.app.start_render(final=False, sample=self.app.sync_sample(payload))
+                self.send_json({"ok": True}, HTTPStatus.ACCEPTED)
+            elif self.path == "/api/parse-program":
+                tracks = parse_repertoire_text(payload["text"])
+                if not tracks:
+                    raise ValueError("Nenhuma música encontrada no programa.")
+                self.send_json({"tracks": tracks})
             elif self.path == "/api/repair-timeline":
                 if self.app.state.snapshot()["running"]:
                     raise RuntimeError("Aguarde o término da renderização antes do reparo.")

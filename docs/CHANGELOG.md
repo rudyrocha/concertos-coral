@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 2.4.0
+
+- adiciona navegação para o início ajustado pelas margens
+- oferece dois clipes de 10 segundos para testar deslocamento e deriva de relógio
+- permite colar o programa numerado ou extrair texto de fotos com OCR local
+
 ## 2.3.5
 
 - abre a interface antes de iniciar uma geração demorada de prévia;

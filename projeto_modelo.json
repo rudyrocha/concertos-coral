@@ -1,6 +1,6 @@
 {
   "schema": "concertos-coral-project-v2",
-  "app_version": "2.3.5",
+  "app_version": "2.4.0",
   "setup_complete": false,
   "bootstrap_completed": false,
   "preview_needs_regeneration": true,

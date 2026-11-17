@@ -4,7 +4,15 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2.3.5
+## Principais recursos da versão 2.4.0
+
+Em **Cortes e margens**, use **Ir para o início ajustado** para conferir o corte na prévia. Se a nova margem incluir um trecho que ficou fora da prévia atual, regenere a prévia.
+
+Em **Testar sincronismo em dois pontos**, posicione a prévia em um ponto com um som fácil de reconhecer e clique em **Usar posição da prévia**, ou digite o horário na câmera. Faça isso em A e B, perto do começo e do fim. Ajuste o deslocamento e a correção de relógio e gere os testes de 10 s. Os dois clipes ficam em players separados, com os valores usados em cada um. Ao concluir, use **Regenerar prévia** para aplicar os parâmetros ao vídeo inteiro.
+
+Em **Importar programa**, cole a lista numerada, com título e créditos em linhas separadas ou no formato `1) Título | Créditos`. Clique em **Conferir músicas**, revise a ordem e aplique. Os títulos e créditos são atualizados por posição nas músicas habilitadas. Os horários existentes são preservados e as novas músicas precisam ser marcadas.
+
+Para ler uma foto JPG ou PNG, instale o [Tesseract OCR](https://tesseract-ocr.github.io/tessdoc/Installation.html) com o idioma português (`por`). Use **Ler foto** e revise o texto extraído antes de aplicar. A leitura acontece no próprio computador.
 
 - reparo assistido de projetos com timecodes fora da duração das fontes;
 - cópia automática do projeto anterior antes de redistribuir marcadores;

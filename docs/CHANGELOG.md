@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 2.3.5
+
+- abre a interface antes de iniciar uma geração demorada de prévia;
+- mostra o progresso da geração iniciada automaticamente;
+- atualiza o vídeo da interface assim que a prévia fica pronta.
+
 ## 2.3.4
 
 - remove o limite arbitrário de 120 segundos para as margens do concerto;

@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.3.4"
+VERSION = "2.3.5"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -1658,9 +1658,13 @@ def main() -> None:
         if had_preview and app.project.get("timing_error") and not args.prepare_only:
             print("A prévia anterior será aberta para permitir o reparo da linha do tempo.")
         else:
-            print("A prévia ainda não existe. A geração pode levar vários minutos.")
+            if args.prepare_only:
+                print("A prévia ainda não existe. A geração pode levar vários minutos.")
+            else:
+                print("Abrindo o editor enquanto a prévia é gerada em segundo plano.")
             app.start_render(final=False)
-            wait_for_render(app, fatal=args.prepare_only or not had_preview)
+            if args.prepare_only:
+                wait_for_render(app, fatal=True)
     if args.prepare_only:
         print(f"Prévia: {app.preview_path}")
         return

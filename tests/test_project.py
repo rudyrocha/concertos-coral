@@ -213,10 +213,13 @@ class ProjectRulesTest(unittest.TestCase):
     def test_interface_detects_outdated_server_without_json_parse_error(self):
         root = Path(__file__).resolve().parents[1]
         interface = (root / "editor.html").read_text(encoding="utf-8")
+        backend = (root / "coral_editor.py").read_text(encoding="utf-8")
         model = json.loads((root / "projeto_modelo.json").read_text(encoding="utf-8"))
         self.assertIn(f"const UI_VERSION='{VERSION}'", interface)
         self.assertIn("response.text()", interface)
         self.assertNotIn("response.json()", interface)
+        self.assertIn("if(s.running&&!wasRendering)", interface)
+        self.assertIn("if args.prepare_only:\n                wait_for_render(app, fatal=True)", backend)
         self.assertEqual(model["app_version"], VERSION)
 
     def test_media_bounds_reject_corrupted_markers(self):

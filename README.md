@@ -4,7 +4,7 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2.3.3
+## Principais recursos da versão 2.3.4
 
 - reparo assistido de projetos com timecodes fora da duração das fontes;
 - cópia automática do projeto anterior antes de redistribuir marcadores;
@@ -15,6 +15,8 @@ O sistema preserva os arquivos originais. Todo o processamento ocorre no computa
 - mensagem visível e `editor_erro.log` para falhas inesperadas de inicialização;
 - reinício automático do servidor local quando a interface foi atualizada;
 - orientação legível quando tela e servidor estão em versões diferentes;
+- margens antes e depois das músicas sem limite arbitrário de 120 segundos;
+- indicação separada do trecho removido e da margem preservada;
 - tratamento de volume equilibrado com compressão moderada e normalização EBU R128 em −16 LUFS;
 - opção de preservar o áudio natural usando somente o ganho global;
 - proteção contra prévia vazia ao alterar o deslocamento de sincronismo;

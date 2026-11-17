@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 2.3.4
+
+- remove o limite arbitrário de 120 segundos para as margens do concerto;
+- esclarece que os campos representam conteúdo preservado antes e depois das músicas;
+- mostra separadamente quanto será removido no início e no final da câmera.
+
 ## 2.3.3
 
 - detecta quando a interface atualizada ainda está conectada a um processo antigo;

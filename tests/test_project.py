@@ -73,6 +73,20 @@ class ProjectRulesTest(unittest.TestCase):
     def test_validation_accepts_valid_project(self):
         validate_project(sample_project())
 
+    def test_long_margins_and_cuts_are_not_limited_to_120_seconds(self):
+        project = sample_project()
+        project["tracks"][0]["start_tascam"] = 400.0
+        project["tracks"][1]["start_tascam"] = 500.0
+        project["last_end_tascam"] = 600.0
+        project["trim"] = {"before_seconds": 200.0, "after_seconds": 180.0}
+        project["sync"] = {"offset_seconds": 0.0, "clock_ratio": 1.0}
+        project["camera_duration_seconds"] = 900.0
+        project["audio_duration_seconds"] = 900.0
+        validate_project(project)
+        times = source_times(project)
+        self.assertEqual(times["camera_start"], 200.0)
+        self.assertEqual(times["camera_end"], 780.0)
+
     def test_validation_rejects_non_chronological_tracks(self):
         project = sample_project()
         project["tracks"][0]["start_tascam"] = 220.0

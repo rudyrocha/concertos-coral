@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.3.3"
+VERSION = "2.3.4"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -289,8 +289,8 @@ def validate_project(project: dict[str, Any]) -> None:
         raise ValueError("Toda música habilitada precisa ter título.")
 
     before, after = trim_values(project)
-    if not 0 <= before <= 120 or not 0 <= after <= 120:
-        raise ValueError("As margens de corte devem ficar entre 0 e 120 segundos.")
+    if not math.isfinite(before) or not math.isfinite(after) or before < 0 or after < 0:
+        raise ValueError("As margens antes e depois das músicas devem ser valores positivos.")
     if starts[0] < before:
         raise ValueError("Não há tempo disponível para a margem antes da primeira música.")
     last_end = float(project.get("last_end_tascam", 0))

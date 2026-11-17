@@ -48,7 +48,8 @@ O PDF do programa não é interpretado diretamente. O editor lê listas numerada
 
 - separar o marcador de início da primeira música do corte inicial;
 - separar o marcador de fim musical do corte final;
-- permitir margens entre 0 e 120 segundos;
+- permitir margens não negativas, limitadas apenas pela duração disponível nas fontes;
+- distinguir na interface o trecho removido da margem preservada;
 - mostrar a duração final prevista antes de renderizar.
 
 ### Exportação e arquivo

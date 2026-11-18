@@ -4,7 +4,11 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2.4.0
+## Principais recursos da versão 2.5.0
+
+Abra a mesma pasta do concerto para continuar do `_CoralEditor/projeto.json` existente. O botão **Recuperar progresso salvo** recarrega as últimas alterações salvas e retorna o player à posição gravada por esta versão, quando ela está na prévia.
+
+Em **Exportar trechos para análise de áudio**, marque o início e o fim de um ou dois trechos usando o player ou os horários da câmera. O editor usa o sincronismo exibido na tela e gera um ZIP com um WAV por fonte e por trecho, além dos horários exatos. Os WAVs preservam canais e níveis. Baixe o ZIP para compartilhar as amostras.
 
 Em **Cortes e margens**, use **Ir para o início ajustado** para conferir o corte na prévia. Se a nova margem incluir um trecho que ficou fora da prévia atual, regenere a prévia.
 

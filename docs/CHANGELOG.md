@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 2.5.0
+
+- recupera o progresso salvo e a última posição salva da prévia
+- exporta um ou dois trechos com o áudio separado da câmera e do Tascam, alinhados para comparação
+
 ## 2.4.0
 
 - adiciona navegação para o início ajustado pelas margens

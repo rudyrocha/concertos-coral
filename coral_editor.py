@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -1153,6 +1153,10 @@ class CoralApplication:
         crop = payload.get("crop", {})
         current["crop"] = {key: int(crop[key]) for key in ("width", "height", "x", "y")}
         current["app_version"] = VERSION
+        if payload.get("resume_camera_seconds") is not None:
+            position = float(payload["resume_camera_seconds"])
+            if math.isfinite(position) and position >= 0:
+                current["resume_camera_seconds"] = position
         current["setup_complete"] = bool(current["last_end_confirmed"]) and all(
             track.get("confirmed", False) for track in enabled_tracks(current)
         )
@@ -1336,6 +1340,72 @@ class CoralApplication:
                     archive.write(candidate, arcname=candidate.name)
         return archive_path
 
+    def export_audio_samples(self, payload: dict[str, Any]) -> str:
+        """Exporta as duas fontes brutas para cada intervalo escolhido."""
+        intervals = payload["intervals"]
+        if not isinstance(intervals, list) or not 1 <= len(intervals) <= 2:
+            raise ValueError("Escolha um ou dois trechos.")
+        offset = float(payload["offset"])
+        ratio = float(payload["ratio"])
+        if not math.isfinite(offset) or not 0.95 <= ratio <= 1.05:
+            raise ValueError("Confira os parâmetros de sincronismo.")
+        camera_limit = float(self.project["camera_duration_seconds"])
+        tascam_limit = float(self.project["audio_duration_seconds"])
+        cuts = []
+        for interval in intervals:
+            start, end = float(interval["start"]), float(interval["end"])
+            audio_start, audio_end = offset + start * ratio, offset + end * ratio
+            if not (0 <= start < end <= camera_limit and 0 <= audio_start < audio_end <= tascam_limit):
+                raise ValueError("Início e fim devem estar em ordem e dentro do trecho comum das duas gravações.")
+            if not 1 <= end - start <= 60:
+                raise ValueError("Selecione de 1 a 60 segundos por trecho. Para avaliação, prefira 15 a 30 segundos.")
+            cuts.append((start, end, audio_start, audio_end))
+        folder = self.work_dir / "amostras_audio"
+        folder.mkdir(exist_ok=True)
+        filename = f"amostras-coral-{uuid.uuid4().hex[:12]}.zip"
+        camera_input = concat_protocol_url(self.camera_paths)
+        report = [
+            f"Deslocamento Tascam − câmera: {offset:+.6f} s",
+            f"Correção de relógio: {ratio:.9f}",
+            "WAVs separados, sem normalização ou redução de ruído.",
+            "A velocidade do Tascam é corrigida apenas quando a correção de relógio difere de 1.",
+        ]
+        with tempfile.TemporaryDirectory(dir=folder) as temporary:
+            stage = Path(temporary)
+            with zipfile.ZipFile(stage / filename, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for slot, (start, end, audio_start, audio_end) in zip("AB", cuts):
+                    report.append(
+                        f"Trecho {slot}: câmera {start:.3f}–{end:.3f} s | "
+                        f"Tascam {audio_start:.3f}–{audio_end:.3f} s"
+                    )
+                    camera_filter = f"asetpts=PTS-STARTPTS,atrim=start={start:.9f}:end={end:.9f},asetpts=PTS-STARTPTS"
+                    sources = [
+                        ("camera", ["-i", camera_input], ["-af", camera_filter]),
+                        ("tascam", ["-ss", f"{audio_start:.9f}", "-t", f"{audio_end - audio_start:.9f}", "-i", str(self.audio_path)],
+                         ["-af", f"atempo={ratio:.12f}"] if ratio != 1 else []),
+                    ]
+                    for name, inputs, filters in sources:
+                        output = stage / f"{slot}-{name}.wav"
+                        command = add_nostdin([
+                            self.ffmpeg, "-v", "error", *inputs, "-map", "0:a:0", "-vn",
+                            *filters, "-t", f"{end - start:.9f}", "-c:a", "pcm_s24le", str(output),
+                        ])
+                        try:
+                            result = subprocess.run(command, capture_output=True, timeout=120, **hidden_process_kwargs())
+                        except subprocess.TimeoutExpired as exc:
+                            raise RuntimeError(f"A extração do trecho {slot} ({name}) demorou demais.") from exc
+                        if result.returncode:
+                            detail = result.stderr.decode("utf-8", errors="replace").strip()
+                            with self.log_path.open("a", encoding="utf-8") as log:
+                                log.write(f"\n[Exportação de áudio {slot}-{name}]\n{detail}\n")
+                            raise RuntimeError(f"Não foi possível extrair o áudio do trecho {slot} ({name}). Veja processamento.log.")
+                        if abs(probe_duration(self.ffprobe, output) - (end - start)) > 0.15:
+                            raise RuntimeError(f"O áudio do trecho {slot} ({name}) ficou incompleto.")
+                        archive.write(output, output.name)
+                archive.writestr("intervalos.txt", "\n".join(report) + "\n")
+            os.replace(stage / filename, folder / filename)
+        return filename
+
     def sync_sample(self, payload: dict[str, Any]) -> tuple[Path, dict, dict]:
         slot = payload["slot"]
         if slot not in ("A", "B"):
@@ -1509,7 +1579,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def serve_file_with_range(self, path: Path, content_type: str) -> None:
+    def serve_file_with_range(self, path: Path, content_type: str, download: bool = False) -> None:
         if not path.is_file():
             self.send_error(HTTPStatus.NOT_FOUND, "Arquivo ainda não foi gerado.")
             return
@@ -1538,6 +1608,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         length = end - start + 1
         self.send_response(status)
         self.send_header("Content-Type", content_type)
+        if download:
+            self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-Length", str(length))
         if status == HTTPStatus.PARTIAL_CONTENT:
@@ -1575,6 +1647,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.serve_file_with_range(self.app.preview_path, "video/mp4")
         elif parsed.path in ("/media/sync-A.mp4", "/media/sync-B.mp4"):
             self.serve_file_with_range(self.app.work_dir / Path(parsed.path).name, "video/mp4")
+        elif re.fullmatch(r"/downloads/amostras-coral-[a-f0-9]{12}\.zip", parsed.path):
+            path = self.app.work_dir / "amostras_audio" / Path(parsed.path).name
+            self.serve_file_with_range(path, "application/zip", download=True)
         elif parsed.path == "/api/chapters":
             self.send_text(self.app.chapters_path.read_text(encoding="utf-8"), "text/plain; charset=utf-8")
         else:
@@ -1601,6 +1676,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             elif self.path == "/api/sync-sample":
                 self.app.start_render(final=False, sample=self.app.sync_sample(payload))
                 self.send_json({"ok": True}, HTTPStatus.ACCEPTED)
+            elif self.path == "/api/export-audio-samples":
+                filename = self.app.export_audio_samples(payload)
+                self.send_json({"download": f"/downloads/{filename}", "filename": filename})
             elif self.path == "/api/parse-program":
                 tracks = parse_repertoire_text(payload["text"])
                 if not tracks:
@@ -1624,7 +1702,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
-        except (ValueError, KeyError, TypeError, RuntimeError) as exc:
+        except (ValueError, KeyError, TypeError, RuntimeError, OSError) as exc:
             self.send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
 

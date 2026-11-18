@@ -62,6 +62,25 @@ class ProjectRulesTest(unittest.TestCase):
         self.assertIn("creationflags", kwargs)
         self.assertIn("startupinfo", kwargs)
 
+    def test_older_projects_keep_tascam_as_the_audio_source(self):
+        project = migrate_project(sample_project())
+        self.assertEqual(project["audio_processing"]["source"], "tascam")
+        project["audio_processing"]["source"] = "camera_treated"
+        validate_project(project)
+        self.assertEqual(migrate_project(project)["audio_processing"]["source"], "camera_treated")
+
+    def test_treated_camera_audio_is_not_trimmed_or_retimed_twice(self):
+        app = CoralApplication.__new__(CoralApplication)
+        project = migrate_project(sample_project())
+        project["audio_processing"].update(mode="natural", source="camera_treated")
+        project["audio_gain_db"] = 20
+        graph = app.filter_graph(project, final=True, treated_audio=True)
+        self.assertEqual(graph.split("[1:a]")[1], "asetpts=PTS-STARTPTS,aresample=48000[a]")
+        legacy_audio = app.filter_graph(project, final=False).split("[1:a]")[1]
+        self.assertIn("atrim=", legacy_audio)
+        self.assertIn("atempo=", legacy_audio)
+        self.assertIn("volume=20.00dB", legacy_audio)
+
     def test_time_mapping_and_duration(self):
         project = sample_project()
         times = source_times(project)

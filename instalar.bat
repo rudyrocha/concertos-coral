@@ -50,8 +50,15 @@ if not exist ".venv\Scripts\pythonw.exe" (
   if errorlevel 1 goto :erro
 )
 
+echo Verificando dependencias do tratamento de audio...
+".venv\Scripts\python.exe" -c "import numpy, soundfile" >nul 2>nul
+if errorlevel 1 (
+  ".venv\Scripts\python.exe" -m pip install "numpy>=1.24,<3" "soundfile>=0.12,<1"
+  if errorlevel 1 goto :erro
+)
+
 echo Validando o aplicativo...
-".venv\Scripts\python.exe" -m py_compile coral_editor.py
+".venv\Scripts\python.exe" -m py_compile coral_editor.py coral_audio.py
 if errorlevel 1 goto :erro
 
 echo.

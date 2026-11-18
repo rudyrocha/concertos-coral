@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"

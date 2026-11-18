@@ -4,7 +4,9 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Tratamento de áudio na versão 2.6.0
+## Ajustes e tratamento de áudio na versão 2.6.1
+
+**Enquadramento e áudio** começa recolhido. Os blocos de sincronismo e comparação de áudio abrem de forma independente logo abaixo da prévia.
 
 1. Ao atualizar, execute `instalar.bat` para preparar as dependências locais do tratamento.
 2. Em **Enquadramento e áudio**, escolha **Câmera tratada com referência do Tascam** para usar esse áudio na prévia e no vídeo final. A seleção é salva no projeto.

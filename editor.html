@@ -54,15 +54,17 @@
         <div id="videoWrap" class="video-wrap final-view"><video id="video" preload="metadata" controls></video><div id="cropBox" class="crop-box"></div><div id="overlay" class="lower-third"><div id="overlayTitle" class="overlay-title"></div><div id="overlayCredits" class="overlay-credits"></div></div></div>
         <div class="transport"><button id="back10">−10 s</button><button id="backFrame">−1 q</button><button id="play" class="primary">Reproduzir</button><button id="forwardFrame">+1 q</button><button id="forward10">+10 s</button><div class="spacer"></div><div class="clock"><strong id="previewClock">00:00:00.000</strong><small id="sourceClock">Tascam: —</small></div></div>
       </div>
-      <details class="panel" open><summary class="panel-head foldable-heading">Enquadramento e áudio</summary><div class="panel-body">
+      <details class="panel"><summary class="panel-head foldable-heading">Enquadramento e áudio</summary><div class="panel-body">
         <button id="toggleView" class="small">Ver quadro original</button>
         <div class="controls">
           <div class="setting"><h3>Enquadramento 16:9</h3><div class="range-row"><span>Zoom</span><input id="cropZoom" type="range" min="1" max="2.5" step="0.001"><output id="zoomOut">1,00×</output></div><div class="range-row"><span>Horiz.</span><input id="cropX" type="range" min="0" max="100" step="1"><output id="xOut">50%</output></div><div class="range-row"><span>Vert.</span><input id="cropY" type="range" min="0" max="100" step="1"><output id="yOut">50%</output></div><button id="resetCrop" class="small">Usar quadro inteiro</button><div id="cropNumbers" class="muted"></div></div>
           <div class="setting"><h3>Áudio e sincronismo</h3><label class="inline"><input id="overlayEnabled" type="checkbox"> Legendas no vídeo</label><label>Fonte de áudio<select id="audioSource"><option value="tascam">Tascam</option><option value="camera_treated">Câmera tratada com referência do Tascam</option></select></label><label>Tratamento de volume<select id="audioMode"><option value="balanced">Equilibrado: música e aplausos</option><option value="natural">Natural: somente ganho global</option></select></label><label>Ganho de entrada do Tascam (dB)<input id="gain" type="number" min="-24" max="24" step="0.1"></label><label>Deslocamento Tascam − câmera (s)<input id="syncOffset" type="number" step="0.001"></label><div class="muted">Corrige uma diferença constante. Valor positivo quando o Tascam começou antes da câmera.</div><label>Correção de relógio<input id="clockRatio" type="number" min="0.95" max="1.05" step="0.000001"></label><div class="muted">Corrige uma diferença que aumenta gradualmente entre o começo e o fim.</div><p id="syncHint" class="muted">Mudanças no áudio, sincronismo ou cortes exigem nova prévia.</p><button id="repairTimeline" class="danger" type="button">Reparar marcações e prévia</button></div>
         </div>
+      </div></details>
+      <div class="panel"><div class="panel-body">
         <details class="setting">
           <summary>Testar sincronismo em dois pontos</summary>
-          <p class="muted">Escolha dois trechos distantes, como uma palma perto do início e outra perto do fim. Cada teste usa o deslocamento e a correção de relógio acima. Compare os dois antes de regenerar a prévia completa.</p>
+          <p class="muted">Escolha dois trechos distantes, como uma palma perto do início e outra perto do fim. Cada teste usa o deslocamento e a correção de relógio de Enquadramento e áudio. Compare os dois antes de regenerar a prévia completa.</p>
           <div class="controls">
             <div class="setting">
               <label>Ponto A · início na câmera<input id="syncStartA" type="text" placeholder="00:03:20"></label>
@@ -101,7 +103,7 @@
         <div class="actions"><button id="save" class="success"><span id="dirtyDot" class="dirty-dot"></span>Salvar projeto</button><button id="renderPreview">Regenerar prévia</button><button id="renderFinal" class="primary">Renderizar vídeo final</button><button id="shutdown" class="danger">Encerrar editor</button></div>
         <button id="resumeSaved" class="small">Recuperar progresso salvo</button>
         <div class="status"><div class="status-line"><strong id="statusMessage">Carregando projeto…</strong><span id="statusPercent">0%</span></div><div class="progress"><div id="progressBar"></div></div><div id="statusOutput" class="status-detail"></div><div id="statusArchive" class="status-detail"></div><div id="statusVerification" class="status-detail"></div></div>
-      </div></details>
+      </div></div>
     </div></section>
 
     <section>
@@ -133,7 +135,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    const UI_VERSION='2.6.0';
+    const UI_VERSION='2.6.1';
     const ids=['eventHeading','versionBadge','videoWrap','video','cropBox','overlay','overlayTitle','overlayCredits','previewLabel','previewClock','sourceClock','play','back10','forward10','backFrame','forwardFrame','toggleView','cropZoom','cropX','cropY','zoomOut','xOut','yOut','resetCrop','cropNumbers','overlayEnabled','audioSource','audioMode','gain','syncOffset','clockRatio','syncHint','repairTimeline','notice','setupBanner','save','dirtyDot','renderPreview','renderFinal','shutdown','statusMessage','statusPercent','progressBar','statusOutput','statusArchive','statusVerification','durationLabel','eventName','eventDate','choir','outputFile','noticeText','chapterOpening','repertoireInfo','addTrack','addEncore','sortTracks','trackList','trimBefore','trimAfter','firstCutInfo','lastCutInfo','lastEnd','goLast','setLast','lastStatus','finalDuration','chapters','copyChapters','toast'];
     const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
     let project=null,dirty=false,wasRendering=false,renderKind=null,toastTimer=null,originalView=false,shuttingDown=false,renderRunning=false;

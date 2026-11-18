@@ -1,6 +1,6 @@
 {
   "schema": "concertos-coral-project-v2",
-  "app_version": "2.5.0",
+  "app_version": "2.6.1",
   "setup_complete": false,
   "bootstrap_completed": false,
   "preview_needs_regeneration": true,
@@ -35,6 +35,7 @@
   },
   "audio_gain_db": null,
   "audio_processing": {
+    "source": "tascam",
     "mode": "balanced",
     "target_lufs": -16.0,
     "loudness_range": 9.0,

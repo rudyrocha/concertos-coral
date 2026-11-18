@@ -4,7 +4,17 @@ Aplicativo local para preparar gravações feitas com câmera Sony Handycam e á
 
 O sistema preserva os arquivos originais. Todo o processamento ocorre no computador do usuário.
 
-## Principais recursos da versão 2.5.0
+## Ajustes e tratamento de áudio na versão 2.6.1
+
+**Enquadramento e áudio** começa recolhido. Os blocos de sincronismo e comparação de áudio abrem de forma independente logo abaixo da prévia.
+
+1. Ao atualizar, execute `instalar.bat` para preparar as dependências locais do tratamento.
+2. Em **Enquadramento e áudio**, escolha **Câmera tratada com referência do Tascam** para usar esse áudio na prévia e no vídeo final. A seleção é salva no projeto.
+3. Em **Comparar ou exportar trechos de áudio**, marque um trecho e clique em **Comparar câmera original e tratada**. Alterne as versões no player com o mesmo volume e na mesma posição.
+
+O editor reaproveita o sincronismo do projeto, busca um ajuste fino para o Tascam e usa essa referência para atenuar interferências na câmera. Projetos anteriores abrem com a seleção Tascam. Com a câmera tratada, o controle de ganho do Tascam fica desativado e o tratamento de volume escolhido continua disponível.
+
+## Recursos da versão 2.5.0
 
 Abra a mesma pasta do concerto para continuar do `_CoralEditor/projeto.json` existente. O botão **Recuperar progresso salvo** recarrega as últimas alterações salvas e retorna o player à posição gravada por esta versão, quando ela está na prévia.
 

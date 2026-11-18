@@ -40,7 +40,10 @@
     details{margin-top:13px;border-top:1px solid var(--line);padding-top:12px}summary{cursor:pointer;color:var(--accent);font-weight:750}pre{max-height:290px;overflow:auto;padding:11px;border-radius:9px;background:#0d131a;white-space:pre-wrap}
     .dirty-dot{display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;background:var(--accent);opacity:0}.dirty-dot.visible{opacity:1}.toast{position:fixed;right:20px;bottom:20px;z-index:20;max-width:430px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:#202b38;box-shadow:var(--shadow);opacity:0;transform:translateY(12px);pointer-events:none;transition:.2s}.toast.show{opacity:1;transform:none}.toast.error{border-color:#984f4d;color:#ffd0cd}
     @media(max-width:1080px){main{grid-template-columns:1fr}.sticky{position:static}}@media(max-width:700px){header{padding:17px 13px 11px}.badge{display:none}main{padding:0 12px 60px}.controls,.metadata,.track-fields,.cut-grid{grid-template-columns:1fr}.metadata .wide{grid-column:auto}.clock{width:100%;text-align:left;order:-1}}
-  </style>
+    .foldable-heading{cursor:pointer}
+  .foldable-heading::after{content:"▸"}
+  details[open] > .foldable-heading::after{content:"▾"}
+</style>
 </head>
 <body>
   <header><div class="brand"><img class="brand-logo" src="/assets/logo.png" alt="Clube Paineiras do Morumby"><div><div class="eyebrow">Editor assistido · Coral Paineiras</div><h1 id="eventHeading">Concerto</h1><div class="subtitle">Enquadramento, repertório, cortes, capítulos e exportação</div></div></div><div id="versionBadge" class="badge">versão 2</div></header>
@@ -51,14 +54,17 @@
         <div id="videoWrap" class="video-wrap final-view"><video id="video" preload="metadata" controls></video><div id="cropBox" class="crop-box"></div><div id="overlay" class="lower-third"><div id="overlayTitle" class="overlay-title"></div><div id="overlayCredits" class="overlay-credits"></div></div></div>
         <div class="transport"><button id="back10">−10 s</button><button id="backFrame">−1 q</button><button id="play" class="primary">Reproduzir</button><button id="forwardFrame">+1 q</button><button id="forward10">+10 s</button><div class="spacer"></div><div class="clock"><strong id="previewClock">00:00:00.000</strong><small id="sourceClock">Tascam: —</small></div></div>
       </div>
-      <div class="panel"><div class="panel-head"><h2>Enquadramento e áudio</h2><button id="toggleView" class="small">Ver quadro original</button></div><div class="panel-body">
+      <details class="panel"><summary class="panel-head foldable-heading">Enquadramento e áudio</summary><div class="panel-body">
+        <button id="toggleView" class="small">Ver quadro original</button>
         <div class="controls">
           <div class="setting"><h3>Enquadramento 16:9</h3><div class="range-row"><span>Zoom</span><input id="cropZoom" type="range" min="1" max="2.5" step="0.001"><output id="zoomOut">1,00×</output></div><div class="range-row"><span>Horiz.</span><input id="cropX" type="range" min="0" max="100" step="1"><output id="xOut">50%</output></div><div class="range-row"><span>Vert.</span><input id="cropY" type="range" min="0" max="100" step="1"><output id="yOut">50%</output></div><button id="resetCrop" class="small">Usar quadro inteiro</button><div id="cropNumbers" class="muted"></div></div>
-          <div class="setting"><h3>Áudio e sincronismo</h3><label class="inline"><input id="overlayEnabled" type="checkbox"> Legendas no vídeo</label><label>Tratamento de volume<select id="audioMode"><option value="balanced">Equilibrado: música e aplausos</option><option value="natural">Natural: somente ganho global</option></select></label><label>Ganho de entrada do Tascam (dB)<input id="gain" type="number" min="-24" max="24" step="0.1"></label><label>Deslocamento Tascam − câmera (s)<input id="syncOffset" type="number" step="0.001"></label><div class="muted">Corrige uma diferença constante. Valor positivo quando o Tascam começou antes da câmera.</div><label>Correção de relógio<input id="clockRatio" type="number" min="0.95" max="1.05" step="0.000001"></label><div class="muted">Corrige uma diferença que aumenta gradualmente entre o começo e o fim.</div><p id="syncHint" class="muted">Mudanças no áudio, sincronismo ou cortes exigem nova prévia.</p><button id="repairTimeline" class="danger" type="button">Reparar marcações e prévia</button></div>
+          <div class="setting"><h3>Áudio e sincronismo</h3><label class="inline"><input id="overlayEnabled" type="checkbox"> Legendas no vídeo</label><label>Fonte de áudio<select id="audioSource"><option value="tascam">Tascam</option><option value="camera_treated">Câmera tratada com referência do Tascam</option></select></label><label>Tratamento de volume<select id="audioMode"><option value="balanced">Equilibrado: música e aplausos</option><option value="natural">Natural: somente ganho global</option></select></label><label>Ganho de entrada do Tascam (dB)<input id="gain" type="number" min="-24" max="24" step="0.1"></label><label>Deslocamento Tascam − câmera (s)<input id="syncOffset" type="number" step="0.001"></label><div class="muted">Corrige uma diferença constante. Valor positivo quando o Tascam começou antes da câmera.</div><label>Correção de relógio<input id="clockRatio" type="number" min="0.95" max="1.05" step="0.000001"></label><div class="muted">Corrige uma diferença que aumenta gradualmente entre o começo e o fim.</div><p id="syncHint" class="muted">Mudanças no áudio, sincronismo ou cortes exigem nova prévia.</p><button id="repairTimeline" class="danger" type="button">Reparar marcações e prévia</button></div>
         </div>
+      </div></details>
+      <div class="panel"><div class="panel-body">
         <details class="setting">
           <summary>Testar sincronismo em dois pontos</summary>
-          <p class="muted">Escolha dois trechos distantes, como uma palma perto do início e outra perto do fim. Cada teste usa o deslocamento e a correção de relógio acima. Compare os dois antes de regenerar a prévia completa.</p>
+          <p class="muted">Escolha dois trechos distantes, como uma palma perto do início e outra perto do fim. Cada teste usa o deslocamento e a correção de relógio de Enquadramento e áudio. Compare os dois antes de regenerar a prévia completa.</p>
           <div class="controls">
             <div class="setting">
               <label>Ponto A · início na câmera<input id="syncStartA" type="text" placeholder="00:03:20"></label>
@@ -77,9 +83,17 @@
           </div>
         </details>
         <details class="setting">
-          <summary>Exportar trechos para análise de áudio</summary>
+          <summary>Comparar ou exportar trechos de áudio</summary>
           <p class="muted">Escolha de 15 a 30 segundos com ruído de fundo ou fala sobre o canto. Use a posição da prévia ou digite os horários da câmera. O ZIP contém os WAVs separados e os horários de corte.</p>
           <div class="controls" id="audioCuts"></div>
+          <div class="setting">
+            <label>Trecho para comparar<select id="comparisonCut"><option value="0">Trecho A</option><option value="1">Trecho B</option></select></label>
+            <button id="compareCamera" class="small" type="button">Comparar câmera original e tratada</button>
+            <label>Versão em reprodução<select id="comparisonVersion" disabled><option value="original">Câmera original</option><option value="treated">Câmera tratada</option></select></label>
+            <audio id="comparisonPlayer" controls preload="metadata" style="width:100%" hidden></audio>
+            <p id="comparisonStatus" class="muted" role="status"></p>
+          </div>
+
           <button id="exportAudio" class="small">Gerar ZIP das amostras</button>
           <p id="audioExportStatus" class="muted" role="status"></p>
           <a id="downloadAudio" hidden>Baixar ZIP das amostras</a>
@@ -121,8 +135,8 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    const UI_VERSION='2.5.0';
-    const ids=['eventHeading','versionBadge','videoWrap','video','cropBox','overlay','overlayTitle','overlayCredits','previewLabel','previewClock','sourceClock','play','back10','forward10','backFrame','forwardFrame','toggleView','cropZoom','cropX','cropY','zoomOut','xOut','yOut','resetCrop','cropNumbers','overlayEnabled','audioMode','gain','syncOffset','clockRatio','syncHint','repairTimeline','notice','setupBanner','save','dirtyDot','renderPreview','renderFinal','shutdown','statusMessage','statusPercent','progressBar','statusOutput','statusArchive','statusVerification','durationLabel','eventName','eventDate','choir','outputFile','noticeText','chapterOpening','repertoireInfo','addTrack','addEncore','sortTracks','trackList','trimBefore','trimAfter','firstCutInfo','lastCutInfo','lastEnd','goLast','setLast','lastStatus','finalDuration','chapters','copyChapters','toast'];
+    const UI_VERSION='2.6.1';
+    const ids=['eventHeading','versionBadge','videoWrap','video','cropBox','overlay','overlayTitle','overlayCredits','previewLabel','previewClock','sourceClock','play','back10','forward10','backFrame','forwardFrame','toggleView','cropZoom','cropX','cropY','zoomOut','xOut','yOut','resetCrop','cropNumbers','overlayEnabled','audioSource','audioMode','gain','syncOffset','clockRatio','syncHint','repairTimeline','notice','setupBanner','save','dirtyDot','renderPreview','renderFinal','shutdown','statusMessage','statusPercent','progressBar','statusOutput','statusArchive','statusVerification','durationLabel','eventName','eventDate','choir','outputFile','noticeText','chapterOpening','repertoireInfo','addTrack','addEncore','sortTracks','trackList','trimBefore','trimAfter','firstCutInfo','lastCutInfo','lastEnd','goLast','setLast','lastStatus','finalDuration','chapters','copyChapters','toast'];
     const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
     let project=null,dirty=false,wasRendering=false,renderKind=null,toastTimer=null,originalView=false,shuttingDown=false,renderRunning=false;
     const frameSeconds=1001/30000;
@@ -169,14 +183,14 @@
     function updateDerived(){if(!project)return;const timing=clientTiming(),ratio=Number(project.sync.clock_ratio),cards=el.trackList.querySelectorAll('.track-card');project.tracks.forEach((t,i)=>{const out=cards[i]?.querySelector('.output');if(out)out.textContent=t.enabled?`vídeo ${formatYoutube(finalTime(t.start_tascam))}`:'fora da exportação'});const duration=Math.max(0,timing.cameraEnd-timing.cameraStart);el.finalDuration.textContent=`Duração prevista do vídeo: ${formatClock(duration,3)}`;el.durationLabel.textContent=formatClock(duration,1);const effectiveBefore=Math.max(0,(firstStart()-timing.audioStart)/ratio),cameraDuration=Number(project.camera_duration_seconds),removedEnd=Number.isFinite(cameraDuration)?Math.max(0,cameraDuration-timing.cameraEnd):0;el.firstCutInfo.textContent=`Trecho removido no início: ${formatClock(timing.cameraStart)} · margem preservada: ${effectiveBefore.toFixed(1)} s`;el.lastCutInfo.textContent=`Trecho removido no final: ${formatClock(removedEnd)} · margem preservada: ${after().toFixed(1)} s`;const clipped=timing.clippedStart||timing.clippedEnd;if(timing.noOverlap)el.syncHint.textContent='Não existe trecho comum com este sincronismo. Corrija o deslocamento; a prévia anterior foi preservada.';else if(timing.markersOutside)el.syncHint.textContent='Este valor deixa parte da apresentação fora do trecho comum. Corrija o deslocamento; a prévia anterior foi preservada.';else if(clipped)el.syncHint.textContent='A margem foi limitada ao trecho comum existente entre câmera e Tascam. A prévia continuará válida.';else el.syncHint.textContent='Mudanças no áudio, sincronismo ou cortes exigem nova prévia.';el.syncHint.style.color=(clipped||timing.markersOutside||timing.noOverlap)?'#ffc867':'';updateChapters();updateOverlay();updateConfirmation()}
     function updateOverlay(){if(!project||!el.overlayEnabled.checked){el.overlay.classList.remove('visible');return}const now=Number(el.video.currentTime)||0,duration=Number(project.overlay_duration_seconds||7),active=enabledTracks().find(t=>{const start=previewTime(t.start_tascam);return now>=start&&now<=start+duration});if(!active){el.overlay.classList.remove('visible');return}el.overlayTitle.textContent=active.title;el.overlayCredits.textContent=active.credits||'';el.overlayCredits.style.display=active.credits?'':'none';el.overlay.classList.add('visible')}
     function updatePlayhead(){if(!project)return;el.previewClock.textContent=formatClock(el.video.currentTime);el.sourceClock.textContent=`Tascam: ${formatClock(absoluteAtPlayhead())}`;el.play.textContent=el.video.paused?'Reproduzir':'Pausar';updateOverlay();const absolute=absoluteAtPlayhead();el.trackList.querySelectorAll('.track-card').forEach((card,i)=>card.classList.toggle('marker-current',Math.abs(Number(project.tracks[i].start_tascam)-absolute)<=.4))}
-    function syncForm(){el.eventHeading.textContent=project.event;el.eventName.value=project.event||'';el.eventDate.value=project.event_date||'';el.choir.value=project.choir||'';el.outputFile.value=project.output_file||'';el.noticeText.value=project.notice||'';el.chapterOpening.value=project.chapter_opening||'';el.notice.textContent=project.notice||'';el.notice.classList.toggle('visible',!!project.notice);el.overlayEnabled.checked=!!project.overlay_enabled;el.audioMode.value=project.audio_processing?.mode||'balanced';el.gain.value=Number(project.audio_gain_db||0).toFixed(2);el.syncOffset.value=Number(project.sync.offset_seconds||0).toFixed(3);el.clockRatio.value=Number(project.sync.clock_ratio||1).toFixed(6);el.trimBefore.value=before();el.trimAfter.value=after();el.lastEnd.value=formatClock(project.last_end_tascam);el.repertoireInfo.textContent=project.repertoire_source?`importado de ${project.repertoire_source}`:'tempos do WAV Tascam';el.versionBadge.textContent=`versão ${project.derived.app_version}`;el.previewLabel.textContent=project.preview_needs_regeneration?'prévia anterior preservada · regenere para aplicar os ajustes':'prévia sincronizada · enquadramento aplicado na tela';el.repairTimeline.style.display=project.derived?.timing_error?'':'none';syncCropSliders();buildTracks()}
-    function pullForm(){project.event=el.eventName.value.trim();project.event_date=el.eventDate.value;project.choir=el.choir.value.trim();project.output_file=el.outputFile.value.trim();project.notice=el.noticeText.value.trim();project.chapter_opening=el.chapterOpening.value.trim();project.overlay_enabled=el.overlayEnabled.checked;project.audio_processing=project.audio_processing||{};project.audio_processing.mode=el.audioMode.value;project.audio_gain_db=Number(el.gain.value);project.sync.offset_seconds=Number(el.syncOffset.value);project.sync.clock_ratio=Number(el.clockRatio.value);project.trim.before_seconds=Number(el.trimBefore.value);project.trim.after_seconds=Number(el.trimAfter.value);project.last_end_tascam=parseClock(el.lastEnd.value)}
-    function payload(){pullForm();return {event:project.event,event_date:project.event_date,choir:project.choir,notice:project.notice,chapter_opening:project.chapter_opening,output_file:project.output_file,tracks:project.tracks,last_end_tascam:project.last_end_tascam,last_end_confirmed:project.last_end_confirmed,overlay_enabled:project.overlay_enabled,audio_processing_mode:project.audio_processing.mode,audio_gain_db:project.audio_gain_db,trim_before_seconds:before(),trim_after_seconds:after(),sync_offset_seconds:project.sync.offset_seconds,clock_ratio:project.sync.clock_ratio,crop:project.crop,resume_camera_seconds:Number.isFinite(el.video.duration)?Math.max(0,previewCameraStart()+el.video.currentTime):null}}
+    function syncForm(){el.eventHeading.textContent=project.event;el.eventName.value=project.event||'';el.eventDate.value=project.event_date||'';el.choir.value=project.choir||'';el.outputFile.value=project.output_file||'';el.noticeText.value=project.notice||'';el.chapterOpening.value=project.chapter_opening||'';el.notice.textContent=project.notice||'';el.notice.classList.toggle('visible',!!project.notice);el.overlayEnabled.checked=!!project.overlay_enabled;el.audioMode.value=project.audio_processing?.mode||'balanced';el.audioSource.value=project.audio_processing?.source||'tascam';el.gain.disabled=el.audioSource.value==='camera_treated';el.gain.value=Number(project.audio_gain_db||0).toFixed(2);el.syncOffset.value=Number(project.sync.offset_seconds||0).toFixed(3);el.clockRatio.value=Number(project.sync.clock_ratio||1).toFixed(6);el.trimBefore.value=before();el.trimAfter.value=after();el.lastEnd.value=formatClock(project.last_end_tascam);el.repertoireInfo.textContent=project.repertoire_source?`importado de ${project.repertoire_source}`:'tempos do WAV Tascam';el.versionBadge.textContent=`versão ${project.derived.app_version}`;el.previewLabel.textContent=project.preview_needs_regeneration?'prévia anterior preservada · regenere para aplicar os ajustes':'prévia sincronizada · enquadramento aplicado na tela';el.repairTimeline.style.display=project.derived?.timing_error?'':'none';syncCropSliders();buildTracks()}
+    function pullForm(){project.event=el.eventName.value.trim();project.event_date=el.eventDate.value;project.choir=el.choir.value.trim();project.output_file=el.outputFile.value.trim();project.notice=el.noticeText.value.trim();project.chapter_opening=el.chapterOpening.value.trim();project.overlay_enabled=el.overlayEnabled.checked;project.audio_processing=project.audio_processing||{};project.audio_processing.mode=el.audioMode.value;project.audio_processing.source=el.audioSource.value;el.gain.disabled=el.audioSource.value==='camera_treated';project.audio_gain_db=Number(el.gain.value);project.sync.offset_seconds=Number(el.syncOffset.value);project.sync.clock_ratio=Number(el.clockRatio.value);project.trim.before_seconds=Number(el.trimBefore.value);project.trim.after_seconds=Number(el.trimAfter.value);project.last_end_tascam=parseClock(el.lastEnd.value)}
+    function payload(){pullForm();return {event:project.event,event_date:project.event_date,choir:project.choir,notice:project.notice,chapter_opening:project.chapter_opening,output_file:project.output_file,tracks:project.tracks,last_end_tascam:project.last_end_tascam,last_end_confirmed:project.last_end_confirmed,overlay_enabled:project.overlay_enabled,audio_processing_mode:project.audio_processing.mode,audio_source:project.audio_processing.source,audio_gain_db:project.audio_gain_db,trim_before_seconds:before(),trim_after_seconds:after(),sync_offset_seconds:project.sync.offset_seconds,clock_ratio:project.sync.clock_ratio,crop:project.crop,resume_camera_seconds:Number.isFinite(el.video.duration)?Math.max(0,previewCameraStart()+el.video.currentTime):null}}
     async function api(path,options={}){const response=await fetch(path,options),text=await response.text();let data;try{data=text?JSON.parse(text):{}}catch(_){if(response.status===404)throw new Error('O servidor aberto é de uma versão anterior. Clique em “Encerrar editor” e abra-o novamente.');throw new Error(`O servidor retornou uma resposta inválida (HTTP ${response.status}). Encerre o editor e abra novamente.`)}if(!response.ok||data.ok===false)throw new Error(data.error||`Falha HTTP ${response.status}`);return data}
     async function save(silent=false){try{const data=await api('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())}),preview=project.preview;project=data.project;if(!project.preview&&preview)project.preview=preview;setDirty(false);syncForm();if(!silent)toast('Projeto, capítulos e cartelas salvos.');return true}catch(e){toast(e.message,true);return false}}
     async function render(kind){if(kind==='final'&&pendingCount()){toast('Confirme todas as marcações antes da exportação final.',true);return}if(!(await save(true)))return;try{await api(kind==='final'?'/api/render-final':'/api/render-preview',{method:'POST'});renderKind=kind;wasRendering=true;setButtons(true);toast(kind==='final'?'Renderização final iniciada.':'Geração da prévia iniciada.')}catch(e){toast(e.message,true)}}
     async function repairTimeline(){if(!confirm('Reparar a linha do tempo? O projeto atual será arquivado e as músicas serão redistribuídas provisoriamente nos 27 minutos. Depois será necessário confirmar cada marcador.'))return;try{setButtons(true);const data=await api('/api/repair-timeline',{method:'POST'});project=data.project;setDirty(false);syncForm();await api('/api/render-preview',{method:'POST'});renderKind='preview';wasRendering=true;setButtons(true);toast('Linha do tempo reparada. Gerando uma nova prévia completa.')}catch(e){setButtons(false);toast(e.message,true)}}
-    function setButtons(running){renderRunning=running;for(const slot of ['A','B'])document.getElementById('syncTest'+slot).disabled=running;el.renderPreview.disabled=running;el.renderFinal.disabled=running||!!(project&&pendingCount());el.renderFinal.title=project&&pendingCount()?'Confirme todas as marcações para liberar a exportação final.':'';el.save.disabled=running;el.repairTimeline.disabled=running;el.shutdown.disabled=running}
+    function setButtons(running){renderRunning=running;running=running||comparingCamera;compareButton.disabled=running;for(const slot of ['A','B'])document.getElementById('syncTest'+slot).disabled=running;el.renderPreview.disabled=running;el.renderFinal.disabled=running||!!(project&&pendingCount());el.renderFinal.title=project&&pendingCount()?'Confirme todas as marcações para liberar a exportação final.':'';el.save.disabled=running;el.repairTimeline.disabled=running;el.shutdown.disabled=running}
     async function shutdownEditor(){if(dirty&&!(await save(true)))return;if(!confirm('Encerrar o Editor de Concertos? A aba poderá ser fechada em seguida.'))return;try{shuttingDown=true;await api('/api/shutdown',{method:'POST'});el.statusMessage.textContent='Editor encerrado. Você pode fechar esta aba.';el.statusPercent.textContent='';el.shutdown.disabled=true;el.renderPreview.disabled=true;el.renderFinal.disabled=true;el.save.disabled=true;toast('Editor encerrado. Pode fechar a aba.')}catch(e){shuttingDown=false;toast(e.message,true)}}
     async function poll(){
       if(shuttingDown) return;
@@ -270,6 +284,57 @@
       byId('audioCuts').append(box);
       return inputs;
     });
+
+
+    const compareButton=byId('compareCamera'), compareAudio=byId('comparisonPlayer');
+    const compareMode=byId('comparisonVersion'), compareStatus=byId('comparisonStatus');
+    let comparisonFiles=null, comparingCamera=false, comparisonLoad=0;
+
+    function openComparison(version, position=0, autoplay=false){
+      const request=++comparisonLoad;
+      compareAudio.addEventListener('loadedmetadata',()=>{
+        if(request!==comparisonLoad) return;
+        compareAudio.currentTime=Math.min(position,compareAudio.duration);
+        if(autoplay) compareAudio.play().catch(()=>{});
+      },{once:true});
+      compareAudio.src=comparisonFiles[version];
+    }
+
+    compareAudio.addEventListener('play',()=>el.video.pause());
+    el.video.addEventListener('play',()=>compareAudio.pause());
+
+    compareMode.onchange=()=>{
+      if(comparisonFiles){
+        openComparison(compareMode.value,compareAudio.currentTime,!compareAudio.paused);
+      }
+    };
+
+    compareButton.onclick=async()=>{
+      if(!project || renderRunning || comparingCamera) return;
+      const [start,end]=audioCuts[Number(byId('comparisonCut').value)];
+      comparingCamera=true;
+      setButtons(renderRunning);
+      compareAudio.pause();
+      compareAudio.hidden=true;
+      compareMode.disabled=true;
+      comparisonFiles=null;
+      try{
+        if(!start.value.trim() || !end.value.trim()) throw new Error('Marque o início e o fim do trecho escolhido.');
+        compareStatus.textContent='Preparando as duas versões no mesmo volume…';
+        comparisonFiles=await api('/api/compare-camera-audio',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({start:parseClock(start.value),end:parseClock(end.value),
+            offset:Number(el.syncOffset.value),ratio:Number(el.clockRatio.value)}),
+        });
+        el.video.pause();
+        compareMode.value='original';
+        compareMode.disabled=false;
+        compareAudio.hidden=false;
+        openComparison('original');
+        compareStatus.textContent='Alterne entre original e tratada durante a reprodução.';
+      }catch(error){compareStatus.textContent=error.message}
+      finally{comparingCamera=false;setButtons(renderRunning)}
+    };
 
     byId('exportAudio').onclick=async()=>{
       if(!project) return;
@@ -419,7 +484,7 @@
 
     el.play.onclick=()=>el.video.paused?el.video.play():el.video.pause();el.back10.onclick=()=>el.video.currentTime=Math.max(0,el.video.currentTime-10);el.forward10.onclick=()=>el.video.currentTime=Math.min(el.video.duration||Infinity,el.video.currentTime+10);el.backFrame.onclick=()=>{el.video.pause();el.video.currentTime=Math.max(0,el.video.currentTime-frameSeconds)};el.forwardFrame.onclick=()=>{el.video.pause();el.video.currentTime=Math.min(el.video.duration||Infinity,el.video.currentTime+frameSeconds)};['timeupdate','play','pause','loadedmetadata'].forEach(name=>el.video.addEventListener(name,updatePlayhead));el.video.addEventListener('loadedmetadata',applyCrop);window.addEventListener('resize',applyCrop);
     el.toggleView.onclick=()=>{originalView=!originalView;el.videoWrap.classList.toggle('original-view',originalView);el.videoWrap.classList.toggle('final-view',!originalView);el.toggleView.textContent=originalView?'Ver resultado final':'Ver quadro original';applyCrop()};[el.cropZoom,el.cropX,el.cropY].forEach(input=>input.addEventListener('input',cropFromControls));el.resetCrop.onclick=()=>{project.crop={width:even(project.source_video.width),height:even(project.source_video.height),x:0,y:0};setDirty();syncCropSliders()};
-    [el.eventName,el.eventDate,el.choir,el.outputFile,el.noticeText,el.chapterOpening,el.overlayEnabled].forEach(input=>input.addEventListener('input',()=>{pullForm();setDirty();el.eventHeading.textContent=project.event;el.notice.textContent=project.notice;el.notice.classList.toggle('visible',!!project.notice);updateDerived()}));[el.audioMode,el.gain,el.trimBefore,el.trimAfter,el.syncOffset,el.clockRatio].forEach(input=>input.addEventListener('change',()=>{pullForm();setDirty();updateDerived();toast('Áudio, sincronismo ou cortes alterados. Regenere a prévia para conferir.')}));
+    [el.eventName,el.eventDate,el.choir,el.outputFile,el.noticeText,el.chapterOpening,el.overlayEnabled].forEach(input=>input.addEventListener('input',()=>{pullForm();setDirty();el.eventHeading.textContent=project.event;el.notice.textContent=project.notice;el.notice.classList.toggle('visible',!!project.notice);updateDerived()}));[el.audioSource,el.audioMode,el.gain,el.trimBefore,el.trimAfter,el.syncOffset,el.clockRatio].forEach(input=>input.addEventListener('change',()=>{pullForm();setDirty();updateDerived();toast('Áudio, sincronismo ou cortes alterados. Regenere a prévia para conferir.')}));
     el.lastEnd.onchange=()=>{try{project.last_end_tascam=parseClock(el.lastEnd.value);project.last_end_confirmed=true;el.lastEnd.value=formatClock(project.last_end_tascam);setDirty();updateDerived()}catch(e){toast(e.message,true)}};el.goLast.onclick=()=>seekAbsolute(project.last_end_tascam);el.setLast.onclick=()=>{project.last_end_tascam=absoluteAtPlayhead();project.last_end_confirmed=true;el.lastEnd.value=formatClock(project.last_end_tascam);setDirty();updateDerived();toast('Fim musical confirmado.')};
     el.addTrack.onclick=()=>addTrack('music');el.addEncore.onclick=()=>addTrack('encore');el.sortTracks.onclick=()=>{project.tracks.sort((a,b)=>Number(a.start_tascam)-Number(b.start_tascam));setDirty();buildTracks()};el.save.onclick=()=>save(false);el.renderPreview.onclick=()=>render('preview');el.renderFinal.onclick=()=>render('final');el.repairTimeline.onclick=repairTimeline;el.shutdown.onclick=shutdownEditor;el.copyChapters.onclick=async()=>{try{await navigator.clipboard.writeText(el.chapters.textContent);toast('Capítulos copiados.')}catch(_){toast('Selecione os capítulos e use Ctrl+C.',true)}};
     window.addEventListener('keydown',event=>{if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName))return;if(event.code==='Space'){event.preventDefault();el.play.click()}if(event.key==='ArrowLeft'){event.preventDefault();el.video.currentTime=Math.max(0,el.video.currentTime-(event.shiftKey?frameSeconds:5))}if(event.key==='ArrowRight'){event.preventDefault();el.video.currentTime=Math.min(el.video.duration||Infinity,el.video.currentTime+(event.shiftKey?frameSeconds:5))}});window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue=''}});init();

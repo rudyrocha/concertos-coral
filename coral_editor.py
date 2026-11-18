@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = "2.5.0"
+VERSION = "2.6.1"
 APP_ID = "concertos-coral"
 DEFAULT_PORT = 8765
 SCHEMA = "concertos-coral-project-v2"
@@ -262,6 +262,7 @@ def migrate_project(project: dict[str, Any]) -> dict[str, Any]:
             "true_peak_db": -1.5,
         },
     )
+    migrated["audio_processing"].setdefault("source", "tascam")
     migrated.setdefault("sync", {"offset_seconds": 0.0, "clock_ratio": 1.0, "video_pts_offset": 0.0})
     migrated.setdefault("crop", {"width": 1920, "height": 1080, "x": 0, "y": 0})
     for position, track in enumerate(migrated.get("tracks", []), start=1):
@@ -307,7 +308,10 @@ def validate_project(project: dict[str, Any]) -> None:
     ratio = float(project.get("sync", {}).get("clock_ratio", 0.0))
     if not 0.95 <= ratio <= 1.05:
         raise ValueError("A correção de relógio está fora do intervalo seguro.")
-    audio_mode = str(project.get("audio_processing", {}).get("mode", "balanced"))
+    audio_processing = project.get("audio_processing", {})
+    if audio_processing.get("source", "tascam") not in {"tascam", "camera_treated"}:
+        raise ValueError("Fonte de áudio inválida.")
+    audio_mode = str(audio_processing.get("mode", "balanced"))
     if audio_mode not in {"natural", "balanced"}:
         raise ValueError("Modo de tratamento de áudio inválido.")
 
@@ -917,6 +921,8 @@ class CoralApplication:
         self.ffmpeg = locate_tool("ffmpeg", script_dir)
         self.ffprobe = locate_tool("ffprobe", script_dir)
         self.state = RenderState()
+        self.comparison_lock = threading.Lock()
+        self.comparison_dir = tempfile.TemporaryDirectory(prefix="coral-comparacao-")
 
         if self.project_path.exists():
             raw_project = load_json(self.project_path)
@@ -1124,6 +1130,7 @@ class CoralApplication:
             float(old_enabled[0]["start_tascam"]) if old_enabled else None,
             float(current.get("audio_gain_db", 0.0)),
             str(current.get("audio_processing", {}).get("mode", "balanced")),
+            str(current.get("audio_processing", {}).get("source", "tascam")),
         )
         current["tracks"] = tracks
         current["event"] = str(payload.get("event", current.get("event", "Concerto"))).strip()
@@ -1140,6 +1147,9 @@ class CoralApplication:
         current["audio_gain_db"] = float(payload.get("audio_gain_db", 0.0))
         audio_mode = str(payload.get("audio_processing_mode", "balanced"))
         current.setdefault("audio_processing", {})["mode"] = audio_mode
+        current["audio_processing"]["source"] = str(
+            payload.get("audio_source", current["audio_processing"].get("source", "tascam"))
+        )
         current["trim"] = {
             "before_seconds": float(payload.get("trim_before_seconds", 10.0)),
             "after_seconds": float(payload.get("trim_after_seconds", 10.0)),
@@ -1169,6 +1179,7 @@ class CoralApplication:
             float(enabled_tracks(current)[0]["start_tascam"]),
             float(current.get("audio_gain_db", 0.0)),
             str(current.get("audio_processing", {}).get("mode", "balanced")),
+            str(current.get("audio_processing", {}).get("source", "tascam")),
         )
         if new_timing != previous_timing:
             current["preview_needs_regeneration"] = True
@@ -1178,7 +1189,7 @@ class CoralApplication:
         self.refresh_outputs()
         atomic_write_json(self.project_path, current)
 
-    def filter_graph(self, project: dict[str, Any], final: bool, timing=None) -> str:
+    def filter_graph(self, project: dict[str, Any], final: bool, timing=None, treated_audio=False) -> str:
         if timing is None:
             timing = source_times(project)
         ratio = float(project["sync"]["clock_ratio"])
@@ -1212,6 +1223,8 @@ class CoralApplication:
             f"volume={gain:.2f}dB",
         ]
         audio_processing = project.get("audio_processing", {})
+        if treated_audio:
+            audio_filters = ["asetpts=PTS-STARTPTS"]
         if audio_processing.get("mode", "balanced") == "balanced":
             target = float(audio_processing.get("target_lufs", -16.0))
             loudness_range = float(audio_processing.get("loudness_range", 9.0))
@@ -1228,7 +1241,7 @@ class CoralApplication:
         audio_filters.append("aresample=48000")
         return f"[0:v]{','.join(video_filters)}[v];[1:a]{','.join(audio_filters)}[a]"
 
-    def ffmpeg_command(self, project: dict[str, Any], final: bool, output: Path, timing=None) -> list[str]:
+    def ffmpeg_command(self, project: dict[str, Any], final: bool, output: Path, timing=None, treated_audio=None) -> list[str]:
         export = project.get("export", {})
         command = add_nostdin([
             self.ffmpeg,
@@ -1237,9 +1250,9 @@ class CoralApplication:
             "-i",
             concat_protocol_url(self.camera_paths),
             "-i",
-            str(self.audio_path),
+            str(treated_audio or self.audio_path),
             "-filter_complex",
-            self.filter_graph(project, final, timing),
+            self.filter_graph(project, final, timing, treated_audio is not None),
             "-map",
             "[v]",
             "-map",
@@ -1340,8 +1353,7 @@ class CoralApplication:
                     archive.write(candidate, arcname=candidate.name)
         return archive_path
 
-    def export_audio_samples(self, payload: dict[str, Any]) -> str:
-        """Exporta as duas fontes brutas para cada intervalo escolhido."""
+    def audio_sample_intervals(self, payload: dict[str, Any]):
         intervals = payload["intervals"]
         if not isinstance(intervals, list) or not 1 <= len(intervals) <= 2:
             raise ValueError("Escolha um ou dois trechos.")
@@ -1360,6 +1372,11 @@ class CoralApplication:
             if not 1 <= end - start <= 60:
                 raise ValueError("Selecione de 1 a 60 segundos por trecho. Para avaliação, prefira 15 a 30 segundos.")
             cuts.append((start, end, audio_start, audio_end))
+        return cuts, offset, ratio
+
+    def export_audio_samples(self, payload: dict[str, Any]) -> str:
+        """Exporta as duas fontes brutas para cada intervalo escolhido."""
+        cuts, offset, ratio = self.audio_sample_intervals(payload)
         folder = self.work_dir / "amostras_audio"
         folder.mkdir(exist_ok=True)
         filename = f"amostras-coral-{uuid.uuid4().hex[:12]}.zip"
@@ -1406,6 +1423,79 @@ class CoralApplication:
             os.replace(stage / filename, folder / filename)
         return filename
 
+    def extract_treatment_sources(self, project, timing, stage):
+        duration = float(timing["duration"])
+        start = float(timing["camera_start"])
+        ratio = float(project["sync"]["clock_ratio"])
+        camera = stage / "camera.wav"
+        tascam = stage / "tascam.wav"
+        jobs = (
+            (camera, ["-i", concat_protocol_url(self.camera_paths)],
+             f"asetpts=PTS-STARTPTS,atrim=start={start:.9f},asetpts=PTS-STARTPTS"),
+            (tascam, ["-ss", f"{timing['audio_start']:.9f}", "-i", str(self.audio_path)],
+             f"atempo={ratio:.12f}" if ratio != 1 else "anull"),
+        )
+        with self.log_path.open("a", encoding="utf-8") as log:
+            for output, inputs, filters in jobs:
+                command = add_nostdin([
+                    self.ffmpeg, "-hide_banner", "-v", "error", *inputs, "-map", "0:a:0", "-vn",
+                    "-af", filters, "-t", f"{duration:.9f}", "-ar", "48000", "-ac", "2",
+                    "-c:a", "pcm_s24le", "-rf64", "auto", str(output),
+                ])
+                log.write(f"\n[Tratamento de áudio: extração de {output.name}]\n")
+                log.flush()
+                result = subprocess.run(command, stdout=log, stderr=log, **hidden_process_kwargs())
+                if result.returncode or not output.is_file():
+                    raise RuntimeError(f"Não foi possível extrair {output.name}. Veja processamento.log.")
+        return camera, tascam
+
+    def treated_camera(self, project, timing, stage, progress=None):
+        try:
+            from coral_audio import process_camera
+        except ImportError as exc:
+            raise RuntimeError("Execute instalar.bat para instalar as dependências do tratamento de áudio.") from exc
+        camera, tascam = self.extract_treatment_sources(project, timing, stage)
+        treated = stage / "camera-tratada.wav"
+        residual, confidence = process_camera(camera, tascam, treated, timing["duration"], progress)
+        with self.log_path.open("a", encoding="utf-8") as log:
+            log.write(f"\n[Tratamento de áudio] Ajuste fino do Tascam: {residual:+.6f} s; "
+                      f"correlação: {confidence:.3f}.\n")
+        return camera, treated
+
+    def compare_camera_audio(self, payload):
+        try:
+            from coral_audio import prepare_comparison
+        except ImportError as exc:
+            raise RuntimeError("Execute instalar.bat para instalar as dependências do tratamento de áudio.") from exc
+        cuts, offset, ratio = self.audio_sample_intervals({
+            "intervals": [{"start": payload["start"], "end": payload["end"]}],
+            "offset": payload["offset"], "ratio": payload["ratio"],
+        })
+        start, end, audio_start, audio_end = cuts[0]
+        project = {"sync": {"offset_seconds": offset, "clock_ratio": ratio}}
+        timing = {"camera_start": start, "duration": end - start,
+                  "audio_start": audio_start, "audio_end": audio_end}
+        if not self.comparison_lock.acquire(blocking=False):
+            raise RuntimeError("Já existe uma comparação de áudio em andamento.")
+        try:
+            if self.state.snapshot()["running"]:
+                raise RuntimeError("Aguarde o término da renderização.")
+            result_id = uuid.uuid4().hex
+            destination = Path(self.comparison_dir.name) / result_id
+            destination.mkdir()
+            try:
+                with tempfile.TemporaryDirectory(dir=self.work_dir) as staging:
+                    camera, treated = self.treated_camera(project, timing, Path(staging))
+                    prepare_comparison(camera, treated, destination / "original.wav",
+                                       destination / "tratado.wav", timing["duration"])
+            except Exception:
+                shutil.rmtree(destination)
+                raise
+        finally:
+            self.comparison_lock.release()
+        return {"original": f"/media/comparacao/{result_id}/original.wav",
+                "treated": f"/media/comparacao/{result_id}/tratado.wav"}
+
     def sync_sample(self, payload: dict[str, Any]) -> tuple[Path, dict, dict]:
         slot = payload["slot"]
         if slot not in ("A", "B"):
@@ -1441,6 +1531,7 @@ class CoralApplication:
             verification=None,
             error=None,
         )
+        stage = None
         try:
             project = sample[1] if sample else self.reload_project()
             if final and not project.get("setup_complete", False):
@@ -1460,7 +1551,16 @@ class CoralApplication:
                 self.write_outputs()
             output = sample[0] if sample else (self.final_dir / project["output_file"] if final else self.preview_path)
             temporary = output.with_name(output.stem + ".parcial" + output.suffix)
-            command = self.ffmpeg_command(project, final, temporary, timing)
+            treated_audio = None
+            if not sample and project["audio_processing"].get("source") == "camera_treated":
+                self.state.update(message="Preparando o áudio da câmera e do Tascam...")
+                stage = tempfile.TemporaryDirectory(dir=self.work_dir)
+
+                def audio_progress(fraction):
+                    self.state.update(message=f"Tratando o áudio da câmera: {fraction:.0%}")
+
+                _, treated_audio = self.treated_camera(project, timing, Path(stage.name), audio_progress)
+            command = self.ffmpeg_command(project, final, temporary, timing, treated_audio)
             with self.log_path.open("a", encoding="utf-8") as log_handle:
                 log_handle.write(f"\n[Renderização {kind}]\n")
                 log_handle.write(subprocess.list2cmdline(command) + "\n")
@@ -1536,10 +1636,14 @@ class CoralApplication:
         except Exception as exc:  # noqa: BLE001 - registro operacional
             self.state.update(running=False, message=f"Falha ao gerar {kind}.", error=str(exc))
 
+        finally:
+            if stage is not None:
+                stage.cleanup()
+
     def start_render(self, final: bool, sample=None) -> None:
         with self.state.lock:
-            if self.state.data["running"]:
-                raise RuntimeError("Já existe uma renderização em andamento.")
+            if self.state.data["running"] or self.comparison_lock.locked():
+                raise RuntimeError("Aguarde o processamento em andamento.")
             kind = "teste de sincronismo" if sample else "final" if final else "prévia"
             self.state.data.update(running=True, kind=kind, progress=0, error=None)
         threading.Thread(target=self.run_render, args=(final, sample), daemon=True).start()
@@ -1647,6 +1751,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.serve_file_with_range(self.app.preview_path, "video/mp4")
         elif parsed.path in ("/media/sync-A.mp4", "/media/sync-B.mp4"):
             self.serve_file_with_range(self.app.work_dir / Path(parsed.path).name, "video/mp4")
+        elif re.fullmatch(r"/media/comparacao/[a-f0-9]{32}/(?:original|tratado)\.wav", parsed.path):
+            result, filename = parsed.path.split("/")[-2:]
+            path = Path(self.app.comparison_dir.name) / result / filename
+            self.serve_file_with_range(path, "audio/wav")
         elif re.fullmatch(r"/downloads/amostras-coral-[a-f0-9]{12}\.zip", parsed.path):
             path = self.app.work_dir / "amostras_audio" / Path(parsed.path).name
             self.serve_file_with_range(path, "application/zip", download=True)
@@ -1676,6 +1784,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             elif self.path == "/api/sync-sample":
                 self.app.start_render(final=False, sample=self.app.sync_sample(payload))
                 self.send_json({"ok": True}, HTTPStatus.ACCEPTED)
+            elif self.path == "/api/compare-camera-audio":
+                self.send_json(self.app.compare_camera_audio(payload))
             elif self.path == "/api/export-audio-samples":
                 filename = self.app.export_audio_samples(payload)
                 self.send_json({"download": f"/downloads/{filename}", "filename": filename})
@@ -1696,7 +1806,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     }
                 )
             elif self.path == "/api/shutdown":
-                if self.app.state.snapshot()["running"]:
+                if self.app.state.snapshot()["running"] or self.app.comparison_lock.locked():
                     raise RuntimeError("Aguarde o término da renderização antes de encerrar.")
                 self.send_json({"ok": True, "message": "Editor encerrado."})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
